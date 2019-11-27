@@ -2122,7 +2122,7 @@ class PONizer {
         $inputs = wf_HiddenInput('createnewonu', 'true');
         $inputs .= wf_Selector('newoltid', $this->allOltDevices, __('OLT device') . $this->sup, '', true);
         $inputs .= wf_Selector('newonumodelid', $models, __('ONU model') . $this->sup, '', true);
-        if (@$this->altCfg['PON_ONUIPASIF']) {
+        if (!empty($this->altCfg['PON_ONUIPASIF'])) {
             $ipFieldLabel = __('Interface');
         } else {
             $ipFieldLabel = __('IP');

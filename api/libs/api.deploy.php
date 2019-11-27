@@ -12,18 +12,21 @@ class Avarice {
     }
 
     /**
-     * encodes data string by some sey
+     * Encodes data string by some key
      * 
-     * @param $data data to encode
-     * @param $key  encoding key
+     * @param string $data data to encode
+     * @param string $key  encoding key
      * 
      * @return binary
      */
     protected function xoror($data, $key) {
         $result = '';
-        for ($i = 0; $i < strlen($data);) {
-            for ($j = 0; $j < strlen($key); $j++, $i++) {
-                @$result .= $data{$i} ^ $key{$j};
+        $dataLen = strlen($data);
+        $keyLen = strlen($key);
+        for ($i = 0; $i < $dataLen;) {
+            for ($j = 0; $j < $keyLen; $j++, $i++) {
+                $curData = $i < $dataLen ? $data{$i} : '';
+                $result .= $curData ^ $key{$j};
             }
         }
         return($result);

@@ -146,7 +146,7 @@ class Announcements {
      * @return void
      */
     protected function setAnnounceFor() {
-        if (wf_CheckGet(array('admiface')) OR ( (@$_GET['module'] == 'taskbar') OR ! isset($_GET['module']))) {
+        if (wf_CheckGet(['admiface']) || ((isset($_GET['module']) && $_GET['module'] === 'taskbar') || !isset($_GET['module']))) {
             $this->ann_for = 'ADMINS';
             $this->admiface = '&admiface=true';
             $this->announcementsTable = 'admannouncements';
@@ -208,8 +208,8 @@ class Announcements {
         $ann_arr=$this->loadAvaibleAnnouncements();
         if (!empty($ann_arr)) {
             foreach ($ann_arr as $key => $data) {
-                $this->announcesAvaible[$data['id']]['public'] = @$data['public'];
-                $this->announcesAvaible[$data['id']]['type'] = @$data['type'];
+                $this->announcesAvaible[$data['id']]['public'] = isset($data['public']) ? $data['public'] : null;
+                $this->announcesAvaible[$data['id']]['type'] =  isset($data['type']) ? $data['type'] : null;
                 $this->announcesAvaible[$data['id']]['title'] = $data['title'];
                 $this->announcesAvaible[$data['id']]['text'] = $data['text'];
             }
