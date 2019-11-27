@@ -341,11 +341,12 @@ class PhotoStorage {
     public function catchFileUpload() {
         if (wf_CheckGet(array('uploadfilephoto'))) {
             if (!empty($this->scope)) {
-                $allowedExtensions = array("jpg", "gif", "png", "jpeg");
+                $allowedExtensions = array('jpg', 'gif', 'png', 'jpeg');
                 $fileAccepted = true;
                 foreach ($_FILES as $file) {
                     if ($file['tmp_name'] > '') {
-                        if (!in_array(end(explode(".", strtolower($file['name']))), $allowedExtensions)) {
+                        $extension = explode('.', strtolower($file['name']));
+                        if (!in_array(end($extension), $allowedExtensions, true)) {
                             $fileAccepted = false;
                         }
                     }
