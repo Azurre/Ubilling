@@ -462,7 +462,7 @@ class UkvSystem {
                 $actlinks = wf_JSAlert(self::URL_TARIFFS_MGMT . '&tariffdelete=' . $each['id'], web_delete_icon(), __('Removing this may lead to irreparable results'));
                 $actlinks .= wf_modal(web_edit_icon(), __('Edit') . ' ' . $each['tariffname'], $this->tariffEditForm($each['id']), '', '400', '200');
                 $cells .= wf_TableCell($actlinks, '', '', $customkey = 'sorttable_customkey="0"'); //need this to keep table sortable
-                $rows .= wf_TableRow($cells, 'row3');
+                $rows .= wf_TableRow($cells, 'row5');
             }
         }
 
@@ -2596,6 +2596,10 @@ class UkvSystem {
             $reports .= $this->buildReportTask(self::URL_REPORTS_MGMT . 'reportComplexAssign', 'reportcomplexassign.png', __('Users with complex services'));
             $reports .= $this->buildReportTask(self::URL_REPORTS_MGMT . 'reportShouldbeComplex', 'shouldbecomplex.png', __('Users which should be complex in UKV'));
             $reports .= $this->buildReportTask(self::URL_REPORTS_MGMT . 'reportShouldNotbeComplex', 'shouldbecomplex.png', __('Users which should not be complex in UKV'));
+        }
+
+        if ($this->altCfg['CONDET_ENABLED']) {
+            $reports .= $this->buildReportTask('?module=report_condet&ukv=true', 'report_condet.png', __('Connection details report'));
         }
         $reports .= wf_CleanDiv();
         show_window(__('Reports'), $reports);

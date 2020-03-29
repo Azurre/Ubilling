@@ -83,7 +83,7 @@ function lm_GetIconUrl($icon) {
         case 'yellowCar':
             $result = 'skins/mapmarks/yellowcar.png';
             break;
-        
+
         //unknown icon fallback
         default :
             $result = 'skins/mapmarks/blue.png';
@@ -140,6 +140,8 @@ function generic_MapAddMark($coords, $title = '', $content = '', $footer = '', $
         $result .= 'placemark.bindTooltip("' . $content . '", { sticky: true});';
     }
 
+    //$result.='markerscluster.addLayer(placemark);';
+
     return($result);
 }
 
@@ -193,6 +195,7 @@ function generic_MapInit($center, $zoom, $type, $placemarks = '', $editor = '', 
     $mapsCfg = $ubillingConfig->getYmaps();
     $result = '';
     $tileLayerCustoms = '';
+    $canvasRender = ($mapsCfg['CANVAS_RENDER']) ? 'true' : 'false'; //string values
     if (empty($center)) {
         //autolocator here
         $mapCenter = 'map.locate({setView: true, maxZoom: ' . $zoom . '});';
@@ -231,9 +234,23 @@ function generic_MapInit($center, $zoom, $type, $placemarks = '', $editor = '', 
     $result .= wf_tag('script', false, '', 'src="modules/jsc/leaflet/leaflet.js"') . wf_tag('script', true);
 
     //Geocoder libs init
-    $result .= wf_tag('link', false, '', 'rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder@latest/dist/Control.Geocoder.css"');
-    $result .= wf_tag('script', false, '', 'src="https://unpkg.com/leaflet-control-geocoder@latest/dist/Control.Geocoder.min.js"') . wf_tag('script', true);
+    $result .= wf_tag('link', false, '', 'rel="stylesheet" href="modules/jsc/leaflet-geocoder/Control.Geocoder.css"');
+    $result .= wf_tag('script', false, '', 'src="modules/jsc/leaflet-geocoder/Control.Geocoder.min.js"') . wf_tag('script', true);
 
+    //Ruler libs init
+    $result .= wf_tag('link', false, '', 'rel="stylesheet" href="modules/jsc/leaflet-ruler/src/leaflet-ruler.css"');
+    $result .= wf_tag('script', false, '', 'src="modules/jsc/leaflet-ruler/src/leaflet-ruler.js"') . wf_tag('script', true);
+
+    //Easyprint libs init
+    $result .= wf_tag('script', false, '', 'src="modules/jsc/leaflet-easyprint/dist/bundle.js"') . wf_tag('script', true);
+
+    //Marker cluster libs init
+    /**
+      $result .= wf_tag('link', false, '', 'rel="stylesheet" href="modules/jsc/leaflet-markercluster/dist/MarkerCluster.css"');
+      $result .= wf_tag('link', false, '', 'rel="stylesheet" href="modules/jsc/leaflet-markercluster/dist/MarkerCluster.Default.css"');
+      $result .= wf_tag('script', false, '', 'src="modules/jsc/leaflet-markercluster/dist/leaflet.markercluster-src.js"') . wf_tag('script', true);
+     */
+    
     //basic map init
     $result .= wf_tag('script', false, '', 'type = "text/javascript"');
     $result .= '
@@ -248,9 +265,47 @@ function generic_MapInit($center, $zoom, $type, $placemarks = '', $editor = '', 
         
         var geoControl = new L.Control.Geocoder({showResultIcons: true, errorMessage: "' . __('Nothing found') . '", placeholder: "' . __('Search') . '"});
         geoControl.addTo(map);
+        
+        L.easyPrint({
+	title: \'' . __('Export') . '\',
+        defaultSizeTitles: {Current: \'' . __('Current') . '\', A4Landscape: \'A4 Landscape\', A4Portrait: \'A4 Portrait\'},
+	position: \'topright\',
+        filename: \'ubillingmap_' . date("Y-m-d_H:i:s") . '\',
+        exportOnly: true,
+        hideControlContainer: true,
+	sizeModes: [\'Current\', \'A4Landscape\', \'A4Portrait\'],
+        }).addTo(map);
 
+        
+        var options = {
+          position: \'topright\',
+          preferCanvas: \'' . $canvasRender . '\',
+             lengthUnit: {        
+        display: \'' . __('meters') . '\',          
+        decimal: 2,               
+        factor: 1000,    
+        label: \'' . __('Distance') . ':\'           
+      },
+      angleUnit: {
+        display: \'&deg;\',
+        decimal: 2,        
+        factor: null, 
+        label: \'' . __('Bearing') . ':\'
+      }
+        };
+        L.control.ruler(options).addTo(map);
+        /**
+	var markerscluster = L.markerClusterGroup({
+			maxClusterRadius: 20
+                        },
+        );
+        **/
+        
 	' . $placemarks . '
         ' . $editor . '
+            
+        
+	/** map.addLayer(markerscluster); **/
 ';
     $result .= wf_tag('script', true);
     return($result);
@@ -270,7 +325,7 @@ function generic_MapEditor($name, $title = '', $data = '') {
     $data = str_replace("'", '`', $data);
     $data = str_replace("\n", '', $data);
     $data = str_replace('"', '\"', $data);
-    $content = '<form action=\"\" method=\"POST\"><input type=\"hidden\" name=' . $name . ' value=\'"+e.latlng.lat+\', \'+e.latlng.lng+"\'>' . $data . '</form>';
+    $content = '<form action=\"\" method=\"POST\"><input type=\"hidden\" name=' . $name . ' value=\'"+e.latlng.lat.toPrecision(7)+\',\'+e.latlng.lng.toPrecision(7)+"\'>' . $data . '</form>';
 
 
     //$content = str_replace('"', '\"', $content);
@@ -280,7 +335,7 @@ function generic_MapEditor($name, $title = '', $data = '') {
                 function onMapClick(e) {
                         popup
                                 .setLatLng(e.latlng)
-                                .setContent("' . $windowCode . '<br>" + e.latlng.lat + ", " + e.latlng.lng)
+                                .setContent("' . $windowCode . '<br>" + e.latlng.lat.toPrecision(7) + "," + e.latlng.lng.toPrecision(7))
                                 .openOn(map);
                 }
 

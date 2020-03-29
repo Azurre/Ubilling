@@ -130,10 +130,11 @@ function la_PasswordInput($name, $label = '', $value = '', $br = false, $size = 
  * @param string $title text title of URL
  * @param bool  $br append new line - bool
  * @param string $class class for link
+ * @param string  $options for link
  * 
  * @return  string
  */
-function la_Link($url, $title, $br = false, $class = '') {
+function la_Link($url, $title, $br = false, $class = '', $options = '') {
     if ($class != '') {
         $link_class = 'class="' . $class . '"';
     } else {
@@ -144,7 +145,10 @@ function la_Link($url, $title, $br = false, $class = '') {
     } else {
         $newline = '';
     }
-    $result = '<a href="' . $url . '" ' . $link_class . '>' . __($title) . '</a>' . "\n";
+
+    $opts = ( empty($options) ) ? '' : ' ' . $options;
+
+    $result = '<a href="' . $url . '" ' . $link_class . $opts . '>' . __($title) . '</a>' . "\n";
     $result .= $newline . "\n";
     return ($result);
 }
@@ -534,6 +538,27 @@ function la_img($url, $title = '') {
         $imgtitle = '';
     }
     $result = '<img src="' . $url . '" ' . $imgtitle . ' border="0">';
+    return ($result);
+}
+
+/**
+ * Returns image body with some dimensions
+ * 
+ * @param string $url image url
+ * @param string $title title attribure for image
+ * @param string $width image width
+ * @param string $height image height
+ * 
+ * @return string
+ *  
+ */
+function la_img_sized($url, $title = '', $width = '', $height = '', $style = '') {
+    $imgtitle = ($title != '') ? 'title="' . $title . '"' : '';
+    $imgwidth = ($width != '') ? 'width="' . $width . '"' : '';
+    $imgheight = ($height != '') ? 'height="' . $height . '"' : '';
+    $imgstyle = (empty($style)) ? '' : ' style="' . $style . '" ';
+
+    $result = '<img src="' . $url . '" ' . $imgtitle . ' ' . $imgwidth . ' ' . $imgheight . $imgstyle . ' border="0">';
     return ($result);
 }
 

@@ -409,6 +409,19 @@ function zb_RegLoginProposal($cityalias, $streetalias, $buildnum, $apt, $ip_prop
                 }
             }
         }
+        
+        //Like DEFAULT but increment in the end. Increment counter unique per every alias.
+        //So it can be unique for city, or for city + every street if alias for street was set.
+        if ($type == 'VSRAT_INCREMENT') {
+            $busylogins = zb_AllBusyLogins();
+            for ($i = 1; $i < 100000; $i++) {
+                $proposal = $cityalias . $streetalias . '_' . $i;
+                if (!isset($busylogins[$proposal])) {
+                    $result = $proposal;
+                    break;
+                }
+            }
+        }
 
 
         /////  if wrong option - use DEFAULT
@@ -931,7 +944,9 @@ function zb_UserRegister($user_data, $goprofile = true) {
     if (isset($alterconf['CONTRACT_SAME_AS_LOGIN'])) {
         if ($alterconf['CONTRACT_SAME_AS_LOGIN']) {
             $newUserContract = $login;
+            $contractDate = date("Y-m-d");
             zb_UserChangeContract($login, $newUserContract);
+            zb_UserContractDateCreate($newUserContract, $contractDate);
         }
     }
 
@@ -946,7 +961,7 @@ function zb_UserRegister($user_data, $goprofile = true) {
     }
 
     //contract autogeneration
-    if (isset($alterconf['CONTRACT_AUTOGEN'])) {
+    if (isset($alterconf['CONTRACT_AUTOGEN']) and empty($alterconf['CONTRACT_SAME_AS_LOGIN'])) {
         if ($alterconf['CONTRACT_AUTOGEN']) {
             $contract_proposal = '';
             $allcontracts = zb_UserGetAllContracts();

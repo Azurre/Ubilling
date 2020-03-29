@@ -2926,6 +2926,7 @@ $lang['def']['From creation'] = 'От создания';
 $lang['def']['Network not found'] = 'Сеть не найдена';
 $lang['def']['Job type contains'] = 'Тип работы содержит';
 $lang['def']['Job note contains'] = 'Примечение к задаче содержит';
+$lang['def']['Job phone contains'] = 'Контактный телефон содержит';
 $lang['def']['Script with this alias already exists'] = 'Скрипт с этим алиасом уже существует';
 $lang['def']['Script with this alias not exists'] = 'Скрипт с этим алиасом не существует';
 $lang['def']['No available code templates'] = 'Нету существующих шаблонов кода';
@@ -3120,8 +3121,28 @@ $lang['def']['ONU rendered on map'] = 'ONU отрендерено на карт�
 $lang['def']['User builds not placed on map'] = 'Пользовательских домов не размещены на карте';
 $lang['def']['ONU without assigned user'] = 'ONU с неприсвоенными пользователями';
 $lang['def']['API port'] = 'Порт API';
+$lang['def']['Group'] = 'Группа';
+$lang['def']['Its a trap!'] = 'Это ловушка!';
+$lang['def']['Data source file path or URL'] = 'Путь к файлу или URL источника данных';
+$lang['def']['Lines limit for processing'] = 'Лимит строк для обработки';
+$lang['def']['Available SNMP trap types'] = 'Существующие типы SNMP трап';
+$lang['def']['right to manage SNMP traps viewer'] = 'Право управлять просмотрщиком SNMP ловушек';
+$lang['def']['right to use SNMP traps viewer'] = 'Право использовать просмотрщик SNMP ловушек';
+$lang['def']['Nothing changed'] = 'Ничего не изменилось';
+$lang['def']['Sorry your system is currently unsupported'] = 'Неподдерживаемая система';
+$lang['def']['Crontab editor'] = 'Редактор crontab';
+$lang['def']['Power outages'] = 'Отключения электричества';
+$lang['def']['right to view power outages'] = 'Право просматривать отключения электричества';
+$lang['def']['right to control Dreamkas cash operations'] = 'Право управлять денежными операциями Dreamkas';
+$lang['def']['Money transactions that may was not processed'] = 'Денежные транзакции которые могли быть не обработаны';
+$lang['def']['Unprocessed payments repair'] = 'Исправление необработанных платежей';
+$lang['def']['Bearing'] = 'Азимут';
+$lang['def']['History of switch life'] = 'История жизни свитча';
+$lang['def']['FDB cache'] = 'Кеш FDB';
+$lang['def']['View full'] = 'Просмотреть полностью';
+$lang['def']['Our profit'] = 'Наша прибыль';
+$lang['def']['Payouts for Megogo'] = 'Выплаты для Megogo';
+$lang['def']['Charge period in days'] = 'Периодичность снятия оплаты в днях';
 $lang['def'][''] = '';
-
-
 
 ?>

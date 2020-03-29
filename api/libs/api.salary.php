@@ -149,6 +149,20 @@ class Salary {
      */
     protected $telegramNotify = false;
 
+    /**
+     * Contains start date that large data must be loaded
+     *
+     * @var string
+     */
+    protected $dateFrom = '';
+
+    /**
+     * Contains end date that large data must be loaded to
+     *
+     * @var string
+     */
+    protected $dateTo = '';
+
     const URL_ME = '?module=salary';
     const URL_TS = '?module=taskman&edittask=';
     const URL_JOBPRICES = 'jobprices=true';
@@ -171,6 +185,8 @@ class Salary {
     public function __construct($taskid = '') {
         $this->loadAltCfg();
         $this->setOptions();
+        $this->setDates();
+        $this->catchDateOffsets();
         $this->setUnitTypes();
         $this->loadEmployeeData();
         $this->loadJobtypes();
@@ -210,6 +226,90 @@ class Salary {
 
         if (isset($this->altCfg['SALARY_FACTOR_DEFAULT']) AND $this->altCfg['SALARY_FACTOR_DEFAULT']) {
             $this->defaultFactor = $this->altCfg['SALARY_FACTOR_DEFAULT'];
+        }
+    }
+
+    /**
+     * Catches some date offsets and points internal props into required values
+     * 
+     * @return void
+     */
+    protected function catchDateOffsets() {
+
+        //payroll dates
+        if (ubRouting::checkPost(array('prdatefrom', 'prdateto'))) {
+            $this->setDates(ubRouting::post('prdatefrom', 'mres'), ubRouting::post('prdateto', 'mres'));
+        }
+
+        //payroll processing
+        if (ubRouting::checkPost('prstateprocessing')) {
+            $curYear = curyear();
+            $prevYear = $curYear - 1;
+            $this->setDates($prevYear . date("-m-d"));
+        }
+
+        //timesheets for previous year too
+        if (ubRouting::checkGet('timesheets') or ubRouting::get('module') == 'salary_timesheets') {
+            $curYear = date("Y");
+            $prevYear = $curYear - 1;
+            $this->setDates($prevYear . date("-m-d"));
+        }
+
+        //tasks without jobs report
+        if (ubRouting::checkPost(array('twfdatefrom', 'twfdateto'))) {
+            $this->setDates(ubRouting::post('twfdatefrom', 'mres'), ubRouting::post('twfdateto', 'mres'));
+        }
+
+        //ltreport
+        if (ubRouting::checkPost(array('datefrom', 'dateto'))) {
+            $this->setDates(ubRouting::post('datefrom', 'mres'), ubRouting::post('dateto', 'mres'));
+        }
+
+        //payroll printing
+        if (ubRouting::checkGet(array('df', 'dt', 'print'))) {
+            $this->setDates(ubRouting::get('df', 'mres'), ubRouting::get('dt', 'mres'));
+        }
+
+        //year payments report
+        if (ubRouting::checkGet(array('yearreport'))) {
+            if (ubRouting::checkPost('showyear')) {
+                $this->setDates(ubRouting::post('showyear', 'int') . '-01-01');
+            } else {
+                //begin of current year
+                $curYear = curyear();
+                $this->setDates($curYear . '-01-01');
+            }
+        }
+
+        //tsheets printing
+        if (ubRouting::checkPost(array('tsheetprintmonth', 'tsheetprintyear'))) {
+            $this->setDates(ubRouting::post('tsheetprintyear', 'int') . '-' . ubRouting::post('tsheetprintmonth') . '-01');
+        }
+    }
+
+    /**
+     * Sets start and end dates if requred. 
+     * Default on begin of month and end of current month.
+     * 
+     * @param string $dateFrom
+     * @param string $dateTo
+     * 
+     * @return void
+     */
+    protected function setDates($dateFrom = '', $dateTo = '') {
+        $startTime = '00:00:00';
+        $endTime = '23:56:59';
+
+        if (empty($dateFrom)) {
+            $this->dateFrom = date("Y-m") . '-01' . ' ' . $startTime;
+        } else {
+            $this->dateFrom = $dateFrom . ' ' . $startTime;
+        }
+
+        if (empty($dateTo)) {
+            $this->dateTo = date("Y-m-d") . ' ' . $endTime;
+        } else {
+            $this->dateTo = $dateTo . ' ' . $endTime;
         }
     }
 
@@ -299,7 +399,8 @@ class Salary {
      * @return void
      */
     protected function loadPaid() {
-        $query = "SELECT * from `salary_paid`";
+        $where = "WHERE `date` BETWEEN '" . $this->dateFrom . "' AND '" . $this->dateTo . "'";
+        $query = "SELECT * from `salary_paid` " . $where;
         $all = simple_queryall($query);
         if (!empty($all)) {
             foreach ($all as $io => $each) {
@@ -314,8 +415,10 @@ class Salary {
      * @return void
      */
     protected function loadTimesheets() {
-        $query = "SELECT * from `salary_timesheets` ORDER BY `id` DESC";
+        $where = "WHERE `date` BETWEEN '" . $this->dateFrom . "' AND '" . $this->dateTo . "'";
+        $query = "SELECT * from `salary_timesheets` " . $where . " ORDER BY `id` DESC";
         $all = simple_queryall($query);
+
         if (!empty($all)) {
             foreach ($all as $io => $each) {
                 $this->allTimesheets[$each['id']] = $each;
@@ -563,7 +666,7 @@ class Salary {
                         }
                     }
                 }
-                
+
                 //sending prepared messages for all employee with jobs today
                 if (!empty($sendTmp)) {
                     foreach ($sendTmp as $io => $eachMessage) {
@@ -738,7 +841,14 @@ class Salary {
      */
     protected function loadSalaryJobs($taskid = '') {
         $taskid = vf($taskid, 3);
-        $where = (!empty($taskid)) ? "WHERE `taskid`='" . $taskid . "'" : '';
+        $where = '';
+
+        if (!empty($taskid)) {
+            $where = "WHERE `taskid`='" . $taskid . "'";
+        } else {
+            $where = "WHERE `date` BETWEEN '" . $this->dateFrom . "' AND '" . $this->dateTo . "'";
+        }
+
         $query = "SELECT * from `salary_jobs` " . $where . " ORDER BY `id` ASC";
         $all = simple_queryall($query);
         if (!empty($all)) {
@@ -1694,26 +1804,30 @@ class Salary {
 
         if (!empty($taskArr)) {
             foreach ($taskArr as $io => $each) {
-                $jobData = $this->allJobs[$io];
-                if (isset($this->allJobUnits[$jobData['jobtypeid']])) {
-                    $unit = $this->unitTypes[$this->allJobUnits[$jobData['jobtypeid']]];
+                if (isset($this->allJobs[$io])) {
+                    $jobData = $this->allJobs[$io];
+                    if (isset($this->allJobUnits[$jobData['jobtypeid']])) {
+                        $unit = $this->unitTypes[$this->allJobUnits[$jobData['jobtypeid']]];
+                    } else {
+                        $unit = __('No');
+                    }
+                    $cells = wf_TableCell($jobData['date']);
+                    $cells .= wf_TableCell($jobData['taskid']);
+                    $cells .= wf_TableCell(@$this->allJobtypes[$jobData['jobtypeid']]);
+                    $cells .= wf_TableCell($jobData['factor'] . ' / ' . $unit);
+                    $cells .= wf_TableCell($jobData['overprice']);
+                    $cells .= wf_TableCell($jobData['note']);
+                    $jobPrice = $this->getJobPrice($jobData['id']);
+                    $cells .= wf_TableCell(web_bool_led($jobData['state']));
+                    $cells .= wf_TableCell($jobPrice);
+                    $rows .= wf_TableRow($cells, 'row3');
+                    if (!$jobData['state']) {
+                        $totalSum = $totalSum + $jobPrice;
+                    } else {
+                        $payedSum = $payedSum + $jobPrice;
+                    }
                 } else {
-                    $unit = __('No');
-                }
-                $cells = wf_TableCell($jobData['date']);
-                $cells .= wf_TableCell($jobData['taskid']);
-                $cells .= wf_TableCell(@$this->allJobtypes[$jobData['jobtypeid']]);
-                $cells .= wf_TableCell($jobData['factor'] . ' / ' . $unit);
-                $cells .= wf_TableCell($jobData['overprice']);
-                $cells .= wf_TableCell($jobData['note']);
-                $jobPrice = $this->getJobPrice($jobData['id']);
-                $cells .= wf_TableCell(web_bool_led($jobData['state']));
-                $cells .= wf_TableCell($jobPrice);
-                $rows .= wf_TableRow($cells, 'row3');
-                if (!$jobData['state']) {
-                    $totalSum = $totalSum + $jobPrice;
-                } else {
-                    $payedSum = $payedSum + $jobPrice;
+                    show_error(__('Job') . ' [' . $io . '] ' . __('is not loaded'));
                 }
             }
         }

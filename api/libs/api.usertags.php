@@ -9,11 +9,12 @@
  * 
  * @return array
  */
-function zb_UserGetAllTags() {
+function zb_UserGetAllTags($login = '') {
     $result = array();
     $tagTypes = stg_get_alltagnames();
+    $queryWhere = (empty($login)) ? '' : " WHERE `login` = '" . $login . "'";
     if (!empty($tagTypes)) {
-        $query = "SELECT * from `tags`";
+        $query = "SELECT * from `tags`" . $queryWhere;
         $all = simple_queryall($query);
         if (!empty($all)) {
             foreach ($all as $io => $each) {
@@ -47,24 +48,24 @@ function stg_show_tagtypes() {
     $alltypes = simple_queryall($query);
 
     $cells = wf_TableCell(__('ID'));
-    $cells.= wf_TableCell(__('Color'));
-    $cells.= wf_TableCell(__('Priority'));
-    $cells.= wf_TableCell(__('Text'));
-    $cells.= wf_TableCell(__('Actions'));
+    $cells .= wf_TableCell(__('Color'));
+    $cells .= wf_TableCell(__('Priority'));
+    $cells .= wf_TableCell(__('Text'));
+    $cells .= wf_TableCell(__('Actions'));
     $rows = wf_TableRow($cells, 'row1');
 
     if (!empty($alltypes)) {
         foreach ($alltypes as $io => $eachtype) {
             $eachtagcolor = $eachtype['tagcolor'];
             $actions = wf_JSAlert('?module=usertags&delete=' . $eachtype['id'], web_delete_icon(), $messages->getDeleteAlert());
-            $actions.= wf_JSAlert('?module=usertags&edit=' . $eachtype['id'], web_edit_icon(), $messages->getEditAlert());
+            $actions .= wf_JSAlert('?module=usertags&edit=' . $eachtype['id'], web_edit_icon(), $messages->getEditAlert());
 
             $cells = wf_TableCell($eachtype['id']);
-            $cells.= wf_TableCell(wf_tag('font', false, '', 'color="' . $eachtagcolor . '"') . $eachtagcolor . wf_tag('font', true));
-            $cells.= wf_TableCell($eachtype['tagsize']);
-            $cells.= wf_TableCell(wf_Link('?module=tagcloud&tagid=' . $eachtype['id'], $eachtype['tagname']));
-            $cells.= wf_TableCell($actions);
-            $rows.= wf_TableRow($cells, 'row5');
+            $cells .= wf_TableCell(wf_tag('font', false, '', 'color="' . $eachtagcolor . '"') . $eachtagcolor . wf_tag('font', true));
+            $cells .= wf_TableCell($eachtype['tagsize']);
+            $cells .= wf_TableCell(wf_Link('?module=tagcloud&tagid=' . $eachtype['id'], $eachtype['tagname']));
+            $cells .= wf_TableCell($actions);
+            $rows .= wf_TableRow($cells, 'row5');
         }
     }
 
@@ -72,12 +73,12 @@ function stg_show_tagtypes() {
 
     //construct adding form
     $inputs = wf_ColPicker('newcolor', __('Color'), '#' . rand(11, 99) . rand(11, 99) . rand(11, 99), false, '10');
-    $inputs.= wf_TextInput('newtext', __('Text'), '', false, '15');
-    $inputs.= web_priority_selector() . ' ';
-    $inputs.= wf_HiddenInput('addnewtag', 'true');
-    $inputs.= wf_Submit(__('Create'));
+    $inputs .= wf_TextInput('newtext', __('Text'), '', false, '15');
+    $inputs .= web_priority_selector() . ' ';
+    $inputs .= wf_HiddenInput('addnewtag', 'true');
+    $inputs .= wf_Submit(__('Create'));
     $form = wf_Form("", 'POST', $inputs, 'glamour');
-    $result.= $form;
+    $result .= $form;
 
 
     return ($result);
@@ -170,10 +171,10 @@ function stg_show_user_tags($login) {
         foreach ($alltags as $io => $eachtag) {
             if (isset($tagTypesData[$eachtag['tagid']])) {
                 $tagbody = $tagTypesData[$eachtag['tagid']];
-                $result.= wf_tag('font', false, '', 'color="' . $tagbody['tagcolor'] . '" size="' . $tagbody['tagsize'] . '"');
-                $result.= wf_tag('a', false, '', 'href="?module=tagcloud&tagid=' . $eachtag['tagid'] . '" style="color: ' . $tagbody['tagcolor'] . ';"') . $tagbody['tagname'] . wf_tag('a', true);
-                $result.= wf_tag('font', true);
-                $result.='&nbsp;';
+                $result .= wf_tag('font', false, '', 'color="' . $tagbody['tagcolor'] . '" size="' . $tagbody['tagsize'] . '"');
+                $result .= wf_tag('a', false, '', 'href="?module=tagcloud&tagid=' . $eachtag['tagid'] . '" style="color: ' . $tagbody['tagcolor'] . ';"') . $tagbody['tagname'] . wf_tag('a', true);
+                $result .= wf_tag('font', true);
+                $result .= '&nbsp;';
             }
         }
     }
@@ -196,7 +197,7 @@ function stg_tagadd_selector() {
     }
 
     $inputs = wf_Selector('tagselector', $tagArr, '', '', false);
-    $inputs.= wf_Submit(__('Save'));
+    $inputs .= wf_Submit(__('Save'));
     $result = wf_Form('', 'POST', $inputs, '');
 
     show_window(__('Add tag'), $result);
@@ -235,7 +236,7 @@ function stg_tagdel_selector($login) {
     $result = '';
     if (!empty($usertags)) {
         foreach ($usertags as $io => $eachtag) {
-            $result.=stg_get_tag_body_deleter($eachtag['tagid'], $login, $eachtag['id']);
+            $result .= stg_get_tag_body_deleter($eachtag['tagid'], $login, $eachtag['id']);
         }
     }
     show_window(__('Delete tag'), $result);
@@ -250,11 +251,15 @@ function stg_tagdel_selector($login) {
  * @return void
  */
 function stg_add_user_tag($login, $tagid) {
-    $login = mysql_real_escape_string($login);
-    $tagid = vf($tagid, 3);
-    $query = "INSERT INTO `tags` (`id` ,`login` ,`tagid`) VALUES (NULL , '" . $login . "', '" . $tagid . "'); ";
-    nr_query($query);
-    stg_putlogevent('TAGADD (' . $login . ') TAGID [' . $tagid . ']');
+    $login = ubRouting::filters($login, 'mres');
+    $tagid = ubRouting::filters($tagid, 'int');
+    $tagsDb = new nya_tags();
+
+    $tagsDb->data('login', $login);
+    $tagsDb->data('tagid', $tagid);
+    $tagsDb->create();
+
+    log_register('TAGADD (' . $login . ') TAGID [' . $tagid . ']');
 }
 
 /**
@@ -265,10 +270,19 @@ function stg_add_user_tag($login, $tagid) {
  * @return void
  */
 function stg_del_user_tag($tagid) {
-    $tagid = vf($tagid, 3);
-    $query = "DELETE from `tags` WHERE `id`='" . $tagid . "'";
-    nr_query($query);
-    stg_putlogevent('TAGDEL TAGID [' . $tagid . ']');
+    $tagid = ubRouting::filters($tagid, 'int');
+    $tagsDb = new nya_tags();
+    $tagsDb->where('id', '=', $tagid);
+    $tagData = $tagsDb->getAll();
+    if (!empty($tagData)) {
+        $tagLogin = $tagData[0]['login'];
+        $tagType = $tagData[0]['tagid'];
+        $tagsDb->where('id', '=', $tagid);
+        $tagsDb->delete();
+        log_register('TAGDEL (' . $tagLogin . ') TAGID [' . $tagType . ']');
+    } else {
+        log_register('TAGDEL TAGID [' . $tagid . '] FAIL_NOT_EXISTS');
+    }
 }
 
 /**
@@ -282,7 +296,7 @@ function stg_del_user_tag($tagid) {
 function stg_del_user_tagid($login, $tagid) {
     $login = mysql_real_escape_string($login);
     $tagid = vf($tagid, 3);
-    $query = "DELETE from `tags` WHERE `login`='" . $login . "' AND`tagid`='" . $tagid . "'";
+    $query = "DELETE from `tags` WHERE `login`='" . $login . "' AND `tagid`='" . $tagid . "'";
     nr_query($query);
     stg_putlogevent('TAGDEL LOGIN (' . $login . ') TAGID [' . $tagid . ']');
 }
@@ -314,13 +328,13 @@ function stg_get_tag_body_deleter($id, $login, $tagid) {
     $tagbody = simple_query($query);
     $result = '';
 
-    $result.= wf_tag('font', false, '', 'color="' . $tagbody['tagcolor'] . '" size="' . $tagbody['tagsize'] . '"');
-    $result.= $tagbody['tagname'];
-    $result.= wf_tag('sup');
-    $result.= wf_tag('a', false, '', 'href="?module=usertags&username=' . $login . '&deletetag=' . $tagid . '"') . web_delete_icon() . wf_tag('a', true);
-    $result.= wf_tag('sup', true);
-    $result.= wf_tag('font', true);
-    $result.='&nbsp;';
+    $result .= wf_tag('font', false, '', 'color="' . $tagbody['tagcolor'] . '" size="' . $tagbody['tagsize'] . '"');
+    $result .= $tagbody['tagname'];
+    $result .= wf_tag('sup');
+    $result .= wf_tag('a', false, '', 'href="?module=usertags&username=' . $login . '&deletetag=' . $tagid . '"') . web_delete_icon() . wf_tag('a', true);
+    $result .= wf_tag('sup', true);
+    $result .= wf_tag('font', true);
+    $result .= '&nbsp;';
 
     return($result);
 }
@@ -345,17 +359,52 @@ function zb_FlushAllUserTags($login) {
  * @param int $tagid
  * @param float $price
  * @param string $cashtype
- * @param int  $priority
+ * @param int $priority
+ * @param int $feechargealways
+ * @param int $feechargeperiod
  */
-function zb_VserviceCreate($tagid, $price, $cashtype, $priority, $feechargealways) {
+function zb_VserviceCreate($tagid, $price, $cashtype, $priority, $feechargealways = 0, $feechargeperiod = 0) {
     $tagid = vf($tagid, 3);
-    $price = vf($price);
+    $price = mysql_real_escape_string($price);
     $cashtype = vf($cashtype);
     $priority = vf($priority, 3);
-    $query = "INSERT INTO `vservices` (`id` , `tagid` , `price` , `cashtype` , `priority`, `fee_charge_always`)
-              VALUES (NULL , '" . $tagid . "', '" . $price . "', '" . $cashtype . "', '" . $priority . "', '" . $feechargealways . "');";
+    $feechargeperiod = vf($feechargeperiod, 3);
+
+    $query = "INSERT INTO `vservices` (`id` , `tagid` , `price` , `cashtype` , `priority`, `fee_charge_always`, charge_period_days)
+              VALUES (NULL , '" . $tagid . "', '" . $price . "', '" . $cashtype . "', '" . $priority . "', '" . $feechargealways . "', " . $feechargeperiod . ");";
     nr_query($query);
-    log_register("CREATE VSERVICE [" . $tagid . '] `' . $price . '` [' . $cashtype . '] `' . $priority . '` [' . $feechargealways . '] `');
+    log_register("CREATE VSERVICE [" . $tagid . '] `' . $price . '` [' . $cashtype . '] `' . $priority . '` [' . $feechargealways . '] `' . '` [' . $feechargeperiod . '] `');
+}
+
+/**
+ * Edits virtual service
+ *
+ * @param int $vserviceID
+ * @param int $tagid
+ * @param float $price
+ * @param string $cashtype
+ * @param int  $priority
+ * @param int $feechargealways
+ * @param int $feechargeperiod
+ */
+function zb_VserviceEdit($vserviceID, $tagid, $price, $cashtype, $priority, $feechargealways = 0, $feechargeperiod = 0) {
+    $tagid = vf($tagid, 3);
+    $price = mysql_real_escape_string($price);
+    $cashtype = vf($cashtype);
+    $priority = vf($priority, 3);
+    $feechargeperiod = vf($feechargeperiod, 3);
+
+    $query = "UPDATE `vservices` SET 
+                    `tagid` = " . $tagid . ",   
+                    `price` = " . $price . ", 
+                    `cashtype` = '" . $cashtype . "', 
+                    `priority` = " . $priority . ", 
+                    `fee_charge_always` = " . $feechargealways . ",
+                    `charge_period_days` = " . $feechargeperiod . "
+                WHERE `id` = " . $vserviceID;
+    nr_query($query);
+
+    log_register("CHANGE VSERVICE [" . $vserviceID . "] PRICE `" . $price . "`");
 }
 
 /**
@@ -425,11 +474,12 @@ function web_VserviceAddForm() {
     //$FeeIsChargedAlways = false;
     $serviceFeeTypes = array('stargazer' => __('stargazer user cash'), 'virtual' => __('virtual services cash'));
     $inputs = stg_tagid_selector() . wf_tag('br');
-    $inputs.= wf_Selector('newcashtype', $serviceFeeTypes, __('Cash type'), '', true);
-    $inputs.= web_priority_selector() . wf_tag('br');
-    $inputs.= wf_TextInput('newfee', __('Fee'), '', true, '5');
-    $inputs.= wf_CheckInput('feechargealways', __('Always charge fee, even if balance cash < 0'), true, false);
-    $inputs.= wf_Submit(__('Create'));
+    $inputs .= wf_Selector('newcashtype', $serviceFeeTypes, __('Cash type'), '', true);
+    $inputs .= web_priority_selector() . wf_tag('br');
+    $inputs .= wf_TextInput('newfee', __('Fee'), '', true, '5');
+    $inputs .= wf_TextInput('newperiod', __('Charge period in days'), '', true, '5', 'digits');
+    $inputs .= wf_CheckInput('feechargealways', __('Always charge fee, even if balance cash < 0'), true, false);
+    $inputs .= wf_Submit(__('Create'));
     $form = wf_Form("", 'POST', $inputs, 'glamour');
     return($form);
 }
@@ -460,17 +510,18 @@ function web_VserviceEditForm($vserviceid) {
             $priorities[$i] = $i;
         }
 
-        $FeeIsChargedAlways = ($serviceData['fee_charge_always'] == 1) ? true : false;
+        $feeIsChargedAlways = ($serviceData['fee_charge_always'] == 1) ? true : false;
 
         $inputs = wf_Selector('edittagid', $allTags, __('Tag'), $serviceData['tagid'], true);
-        $inputs.= wf_Selector('editcashtype', $serviceFeeTypes, __('Cash type'), $serviceData['cashtype'], true);
-        $inputs.= wf_Selector('editpriority', $priorities, __('Priority'), $serviceData['priority'], true);
-        $inputs.= wf_TextInput('editfee', __('Fee'), $serviceData['price'], true, '5');
-        $inputs.= wf_CheckInput('editfeechargealways', __('Always charge fee, even if balance cash < 0'), true, $FeeIsChargedAlways);
-        $inputs.= wf_Submit(__('Save'));
+        $inputs .= wf_Selector('editcashtype', $serviceFeeTypes, __('Cash type'), $serviceData['cashtype'], true);
+        $inputs .= wf_Selector('editpriority', $priorities, __('Priority'), $serviceData['priority'], true);
+        $inputs .= wf_TextInput('editfee', __('Fee'), $serviceData['price'], true, '5');
+        $inputs .= wf_TextInput('editperiod', __('Charge period in days'), $serviceData['charge_period_days'], true, '5', 'digits');
+        $inputs .= wf_CheckInput('editfeechargealways', __('Always charge fee, even if balance cash < 0'), true, $feeIsChargedAlways);
+        $inputs .= wf_Submit(__('Save'));
 
         $form = wf_Form("", 'POST', $inputs, 'glamour');
-        $form.= wf_BackLink('?module=vservices');
+        $form .= wf_BackLink('?module=vservices');
         return($form);
     } else {
         throw new Exception('NOT_EXISTING_VSERVICE_ID');
@@ -494,14 +545,16 @@ function web_VservicesShow() {
         'Fee',
         'Cash type',
         'Priority',
-        'Always charge fee'
+        'Always charge fee',
+        'Charge period in days'
     );
     $keys = array('id',
         'tagid',
         'price',
         'cashtype',
         'priority',
-        'fee_charge_always'
+        'fee_charge_always',
+        'charge_period_days'
     );
     show_window(__('Virtual services'), web_GridEditorVservices($titles, $keys, $allvservices, 'vservices', true, true));
     if (!empty($alltagtypes)) {
@@ -662,14 +715,16 @@ function web_VservicesSelector() {
  * 
  * @param bool $log_payment
  * @param bool $charge_frozen
- * 
+ * @param string $whereString
+ *
  * @return void
  */
-function zb_VservicesProcessAll($log_payment = true, $charge_frozen = true) {
+function zb_VservicesProcessAll($log_payment = true, $charge_frozen = true, $whereString = '') {
     global $ubillingConfig;
     $alterconf = $ubillingConfig->getAlter();
     $frozenUsers = array();
-    $query_services = "SELECT * from `vservices` ORDER by `priority` DESC";
+    $query_services = "SELECT * from `vservices` " . $whereString . " ORDER by `priority` DESC";
+
     $allUserData = zb_UserGetAllStargazerDataAssoc();
     $paymentTypeId = 1;
     //custom payment type ID optional option
@@ -680,6 +735,7 @@ function zb_VservicesProcessAll($log_payment = true, $charge_frozen = true) {
     }
 
     $allservices = simple_queryall($query_services);
+
     if (!empty($allservices)) {
         if (!$charge_frozen) {
             $frozen_query = "SELECT `login` from `users` WHERE `Passive`='1';";
@@ -727,11 +783,11 @@ function zb_VservicesProcessAll($log_payment = true, $charge_frozen = true) {
                             }
                             if ($charge_frozen) {
                                 zb_CashAdd($eachuser['login'], $fee, $method, $paymentTypeId, 'Service:' . $eachservice['id']);
-                                $allUserData[$eachuser['login']]['Cash']+=$fee; //updating preloaded cash values
+                                $allUserData[$eachuser['login']]['Cash'] += $fee; //updating preloaded cash values
                             } else {
                                 if (!isset($frozenUsers[$eachuser['login']])) {
                                     zb_CashAdd($eachuser['login'], $fee, $method, $paymentTypeId, 'Service:' . $eachservice['id']);
-                                    $allUserData[$eachuser['login']]['Cash']+=$fee; //updating preloaded cash values
+                                    $allUserData[$eachuser['login']]['Cash'] += $fee; //updating preloaded cash values
                                 }
                             }
                         }
@@ -760,6 +816,25 @@ function zb_VservicesGetAllPrices() {
 }
 
 /**
+ * Returns array of all available virtual services as tagid => array('price' => $price, 'period' => $period);
+ *
+ * @return array
+ */
+function zb_VservicesGetAllPricesPeriods() {
+    $result = array();
+    $query = "SELECT * from `vservices`";
+    $all = simple_queryall($query);
+
+    if (!empty($all)) {
+        foreach ($all as $io => $each) {
+            $result[$each['tagid']] = array('price' => $each['price'], 'daysperiod' => $each['charge_period_days']);
+        }
+    }
+
+    return ($result);
+}
+
+/**
  * Returns price summary of all virtual services fees assigned to user
  * 
  * @param string $login
@@ -775,11 +850,54 @@ function zb_VservicesGetUserPrice($login) {
             $vservicePrices = zb_VservicesGetAllPrices();
             foreach ($allUserTags[$login] as $tagId => $tagName) {
                 if (isset($vservicePrices[$tagId])) {
-                    $result+=$vservicePrices[$tagId];
+                    $result += $vservicePrices[$tagId];
                 }
             }
         }
     }
+    return ($result);
+}
+
+/**
+ * Returns all users with assigned virtual services as array:
+ *         login => array($vServiceName1 => vServicePrice1,
+ *                        $vServiceName2 => vServicePrice2,
+ *                        $vServiceNameN => vServicePriceN
+ *                       )
+ * if $includePeriod is true returned array will look like this:
+ *          login => array($vServiceName1 => array('price' => vServicePrice1, 'daysperiod' => vServicePeriod1),
+ *                        $vServiceName2 => array('price' => vServicePrice2, 'daysperiod' => vServicePeriod2),
+ *                        $vServiceNameN => array('price' => vServicePriceN, 'daysperiod' => vServicePeriodN),
+ *                       )
+ *
+ * @param string $login
+ * @param bool $includePeriod
+ *
+ * @return array
+ */
+function zb_VservicesGetUsersAll($login = '', $includePeriod = false) {
+    $result = array();
+    $allUserTags = zb_UserGetAllTags($login);
+
+    //user have some tags assigned
+    if (!empty($allUserTags)) {
+        $vservicePrices = ($includePeriod) ? zb_VservicesGetAllPricesPeriods() : zb_VservicesGetAllPrices();
+
+        foreach ($allUserTags as $eachLogin => $data) {
+            $tmpArr = array();
+
+            foreach ($data as $tagId => $tagName) {
+                if (isset($vservicePrices[$tagId])) {
+                    $tmpArr[$tagName] = $vservicePrices[$tagId];
+                }
+            }
+
+            if (!empty($tmpArr)) {
+                $result[$eachLogin] = $tmpArr;
+            }
+        }
+    }
+
     return ($result);
 }
 

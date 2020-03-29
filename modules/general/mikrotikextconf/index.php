@@ -17,9 +17,11 @@ if ($altCfg['MIKROTIK_SUPPORT']) {
             private $SNMPCommunity = 'public';
             private $options = array();
             private $config = array();
+            public $nasOptsForTitle = '';
 
             // Constants of class:
             const FORM_NAME = 'opts';
+            const URL_NAS_LIST = '?module=nas';
 
             public function __construct() {
                 /* Filter NAS'es id: */
@@ -32,6 +34,7 @@ if ($altCfg['MIKROTIK_SUPPORT']) {
 
                 /* Get NAS current options: */
                 $this->options = zb_NasOptionsGet($this->_id);
+                $tmpNASData = zb_NasGetData($this->_id);
 
                 /* Get configurtion: */
                 $alter = rcms_parse_ini_file(CONFIG_PATH . 'alter.ini');
@@ -39,6 +42,18 @@ if ($altCfg['MIKROTIK_SUPPORT']) {
                 $this->UseVersionTelepathy = ( !empty($alter['ROUTEROS_VERSION_TELEPATHY']) ) ? true : false;
                 $this->WEBPort = ( !empty($alter['ROUTEROS_VERSION_GET_WEB_PORT']) ) ? $alter['ROUTEROS_VERSION_GET_WEB_PORT'] : '80';
                 $this->SNMPCommunity = ( !empty($alter['ROUTEROS_VERSION_GET_SNMP_COMMUNITY']) ) ? $alter['ROUTEROS_VERSION_GET_SNMP_COMMUNITY'] : 'public';
+
+                if (!empty($tmpNASData)) {
+                    $cidrDATA = multinet_get_network_params($tmpNASData['netid']);
+                    $this->nasOptsForTitle.= ': ' . wf_nbsp() . $tmpNASData['nasname'] . ' ' . $tmpNASData['nasip'];
+
+                    if (!empty($cidrDATA)) {
+                        $this->nasOptsForTitle.= wf_nbsp(3) . ' for network: ' . wf_nbsp() . $tmpNASData['netid'] . ': ' . ((empty($cidrDATA['desc'])) ? __('Network not found') : $cidrDATA['desc']);
+                    } else {
+                        $this->nasOptsForTitle.= wf_nbsp(3) . ' for network: ' . wf_nbsp() . $tmpNASData['netid'] . ': ' . __('Network not found');
+                    }
+                }
+
                 unset($alter);
             }
 
@@ -196,7 +211,11 @@ if ($altCfg['MIKROTIK_SUPPORT']) {
             if (isset($_POST[$obj::FORM_NAME])) {
                 $obj->save();
             }
-            show_window(__('MikroTik extended configuration'), $obj->render());
+
+            $backLink = wf_Plate(wf_BackLink($obj::URL_NAS_LIST, __('Network Access Servers')), '100%', '', '', 'text-align: center;');
+            $backLink.= wf_CleanDiv();
+
+            show_window(__('MikroTik extended configuration') . $obj->nasOptsForTitle, $obj->render() . wf_delimiter(0) . $backLink);
         } else
             show_window(__('Error'), __('No NAS was selected to add options!'));
     } else

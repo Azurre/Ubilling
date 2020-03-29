@@ -1,185 +1,123 @@
 <?php
 
-class OnuDescribe {
+class OnuDescribe extends OnuBase {
 
     /**
-     * Contains system alter config as key=>value
+     * Flag to determine that operation did actually happened and went successfully
      *
-     * @var array
+     * @var bool
      */
-    protected $altCfg = array();
+    public $operationSuccessful = false;
 
     /**
-     * Contains user's onu data from pononu table
-     * 
-     * @var array
+     * Returns ONU description string
+     *
+     * @return bool|mixed|string
+     *
+     * @throws Exception
      */
-    protected $onuData = array();
+    public function getOnuDescription() {
+        $result = false;
+        $onuFound = true;
 
-    /**
-     * Contains OLT data (where user's onu is linked to OLT)
-     * 
-     * @var array
-     */
-    protected $oltData = array();
+        if (empty($this->snmpTemplateParsed)) {
+            $this->displayMessage = __('SNMP template is not found or not exists');
+            return ($result);
+        }
 
-    /**
-     * Contains OLT snmp template file name
-     * 
-     * @var array
-     */
-    protected $oltSnmptemplate = array();
+        if (empty($this->onuData)) {
+            $this->displayMessage = __('ONU data is empty');
+            return ($result);
+        }
 
-    /**
-     * Contain's OLT switch ID
-     * 
-     * @var int
-     */
-    protected $oltId = '';
+        $macOnu = $this->onuData['mac'];
+        $snmpData = $this->snmpTemplateParsed;
 
-    /**
-     * User's login
-     * 
-     * @var string
-     */
-    protected $login = '';
+        if (isset($snmpData['onu']['CONTROLMODE'])) {
+            $snmpControlMode = $snmpData['onu']['CONTROLMODE'];
 
-    /**
-     * Placeholder for snmp class
-     * 
-     * @var pointer
-     */
-    protected $snmp = '';
-
-    public function __construct($login = '') {
-        if (!empty($login)) {
-            $this->LoadAlter();
-            $this->login = $login;
-            $this->GetOnuData($login);
-            $this->snmp = new SNMPHelper;
-            if (!empty($this->oltId)) {
-                $this->GetOltData($this->oltId);
+            if ($snmpControlMode == 'STELSFD11') {
+                $this->displayMessage = __('Function is not supported by this OLT') . ': ' . $snmpControlMode;
+                return ($result);
             }
-            if (!empty($this->oltData)) {
-                $this->GetOltModelData($this->oltData['modelid']);
+
+            if ($snmpControlMode == 'VSOL_1600D') {
+                $macIndexOID = $snmpData['signal']['MACINDEX'];
+                $macValType  = $snmpData['signal']['MACVALUE'];
+                $descrGetIdx = $snmpData['onu']['DESCRIPTIONGET'];
+                $descrValue  = $snmpData['onu']['DESCRVALUE'];
+
+                $macIndexFull = $this->snmp->walk($this->oltData['ip'], $this->oltData['snmp'], $macIndexOID);
+
+                if (!empty($macIndexFull)) {
+                    $macIndexFull = str_ireplace(array($macIndexOID, $macValType, '"'), ' ', $macIndexFull);
+                    $macIndexFull = explodeRows($macIndexFull);
+
+                    foreach ($macIndexFull as $eachRow) {
+                        $indexMAC = explode(' = ', $eachRow);
+
+                        if (!empty($indexMAC[1])) {
+                            $tmpCleanMAC = strtolower(trim($indexMAC[1]));
+
+                            if ($macOnu == $tmpCleanMAC) {
+                                $onuFound = true;
+                                $tmpPONONUIdx = trim($indexMAC[0]);
+
+                                $result = $this->snmp->walk($this->oltData['ip'], $this->oltData['snmp'], $descrGetIdx . $tmpPONONUIdx, false);
+
+                                if (!empty($result) or $result === '') {
+                                    $this->operationSuccessful = true;
+                                    $result = str_replace(array($descrGetIdx . $tmpPONONUIdx, $descrValue, '=', '"', ' '), '', $result);
+                                    return ($result);
+                                }
+                            }
+                        } else {
+                            $onuFound = false;
+                        }
+                    }
+                } else {
+                    $onuFound = false;
+                }
             }
-        }
-    }
-
-    /**
-     * load alter.ini config     
-     * 
-     * @return void
-     */
-    protected function LoadAlter() {
-        global $ubillingConfig;
-        $this->altCfg = $ubillingConfig->getAlter();
-    }
-
-    /**
-     * Get onu data mac and olt ID to which onu is linked
-     * 
-     * @param string $login 
-     */
-    protected function GetOnuData($login) {
-        $query = "SELECT * FROM `pononu` WHERE `login` = '$login'";
-        $data = simple_query($query);
-        if (!empty($data)) {
-            $this->oltId = $data['oltid'];
-            $this->onuData = $data;
-        }
-    }
-
-    /**
-     * Loads data from table `switches` to $oltData var (filter by OLT switch ID)
-     * 
-     * @param int $oltID
-     */
-    protected function GetOltData($oltID) {
-        $query = "SELECT * FROM `switches` WHERE `id`='$oltID'";
-        $data = simple_query($query);
-        if (!empty($data)) {
-            $this->oltData = $data;
-        }
-    }
-
-    /**
-     * Loads data from table `switchmodels` to $oltSnmptemplate (filter by OLT switch model id)
-     * 
-     * @param int $modelID
-     */
-    protected function GetOltModelData($modelID) {
-        $query = "SELECT * FROM `switchmodels` WHERE `id`='$modelID'";
-        $data = simple_query($query);
-        if (!empty($data)) {
-            $this->oltSnmptemplate = $data['snmptemplate'];
-        }
-    }
-
-    /**
-     * Format heximal mac address to decimal or show error
-     * 
-     * @param string $macOnu 
-     * 
-     * @return string
-     */
-    protected function MacHexToDec($macOnu) {
-        if (check_mac_format($macOnu)) {
-            $res = array();
-            $args = explode(":", $macOnu);
-            foreach ($args as $each) {
-                $res[] = hexdec($each);
-            }
-            $string = implode(".", $res);
-            return ($string);
-        } else {
-            show_error("Wrong mac format (shoud be XX:XX:XX:XX:XX:XX)");
-        }
-    }
-
-    public function GetOnuDescription() {
-        if (!empty($this->onuData) AND ! empty($this->oltData) AND ! empty($this->oltSnmptemplate)) {
+        } elseif ($this->checkBDCOMEssentialOpts()) {
             $eponInt = '';
-            $macOnu = $this->onuData['mac'];
-            $decMacOnu = $this->MacHexToDec($macOnu);
-            if (!file_exists(CONFIG_PATH . "/snmptemplates/" . $this->oltSnmptemplate)) {
-                return false;
+            $decMacOnu = $this->macHexToDec($macOnu);
+
+            if (empty($decMacOnu)) {
+                $this->displayMessage = __('Wrong MAC format (should be XX:XX:XX:XX:XX:XX)');
+                return ($result);
             }
-            $snmpData = rcms_parse_ini_file(CONFIG_PATH . "/snmptemplates/" . $this->oltSnmptemplate, true);
-            if (!isset($snmpData['onu']['DESCRIPTION'])) {
-                return false;
-            }
-            if (!isset($snmpData['vlan']['SAVE'])) {
-                return false;
-            }
-            if (!isset($snmpData['onu']['EPONINDEX'])) {
-                return false;
-            }
-            if (!isset($snmpData['onu']['IFINDEX'])) {
-                return false;
-            }
+
             if ($snmpData['vlan']['VLANMODE'] == 'BDCOM_B') {
                 $ifIndexOid = $snmpData['onu']['IFINDEX'] . '.' . $decMacOnu;
                 $ifIndexFull = snmp2_get($this->oltData['ip'], $this->oltData['snmp'], $ifIndexOid);
                 $ifIndex = trim(str_replace(array($ifIndexOid, 'INTEGER:', '= '), '', $ifIndexFull));
+
                 if (!empty($ifIndex)) {
                     $eponIntBare = $this->snmp->walk($this->oltData['ip'], $this->oltData['snmp'], $snmpData['onu']['EPONINDEX'] . '.' . $ifIndex);
                     $eponInt = trim(str_replace(array($snmpData['onu']['EPONINDEX'] . '.' . $ifIndex, ' = INTEGER: '), '', $eponIntBare));
                 }
+
                 if (!empty($eponInt)) {
                     $descriptionOid = $snmpData['onu']['DESCRIPTION'] . '.' . $eponInt . '.' . $decMacOnu;
                     $checkResult = $this->snmp->walk($this->oltData['ip'], $this->oltData['snmp'], $descriptionOid, FALSE);
-                    $Result = trim(str_replace(array($descriptionOid, ' = STRING: '), '', $checkResult));
-                    if (!empty($Result)) {
-                        return $Result;
+                    $result = trim(str_replace(array($descriptionOid, ' = STRING: '), '', $checkResult));
+
+                    if (!empty($result) or $result === '') {
+                        $this->operationSuccessful = true;
+                        return ($result);
                     }
+                } else {
+                    $onuFound = false;
                 }
             }
+
             if ($snmpData['vlan']['VLANMODE'] == 'BDCOM_C') {
                 $allOnuOid = $snmpData['signal']['MACINDEX'];
                 snmp_set_oid_output_format(SNMP_OID_OUTPUT_NUMERIC);
                 $allOnu = @snmp2_real_walk($this->oltData['ip'], $this->oltData['snmp'], $allOnuOid);
                 $searchArray = array();
+
                 if (!empty($allOnu)) {
                     foreach ($allOnu as $eachIndex => $eachOnu) {
                         $eachIndex = trim(str_replace($allOnuOid . '.', '', $eachIndex));
@@ -188,71 +126,175 @@ class OnuDescribe {
                         $eachOnuMac = implode(":", $eachOnuMacArray);
                         $searchArray[$eachOnuMac] = $eachIndex;
                     }
+
                     if (!empty($searchArray) and isset($searchArray[$macOnu])) {
                         $ifIndex = $searchArray[$macOnu];
                         $eponIntBare = $this->snmp->walk($this->oltData['ip'], $this->oltData['snmp'], $snmpData['onu']['EPONINDEX'] . '.' . $ifIndex);
                         $eponInt = trim(str_replace(array($snmpData['onu']['EPONINDEX'] . '.' . $ifIndex, ' = INTEGER: '), '', $eponIntBare));
                     }
+
                     if (!empty($eponInt)) {
                         $descriptionOid = $snmpData['onu']['DESCRIPTION'] . '.' . $eponInt . '.' . $decMacOnu;
                         $checkResult = $this->snmp->walk($this->oltData['ip'], $this->oltData['snmp'], $descriptionOid, FALSE);
-                        $Result = trim(str_replace(array($descriptionOid, ' = STRING: '), '', $checkResult));
-                        if (!empty($Result)) {
-                            return $Result;
+                        $result = trim(str_replace(array($descriptionOid, ' = STRING: '), '', $checkResult));
+
+                        if (!empty($result) or $result === '') {
+                            $this->operationSuccessful = true;
+                            return ($result);
                         }
+                    } else {
+                        $onuFound = false;
                     }
                 }
             }
+        } else {
+            $this->displayMessage = __('Essential SNMP options are missing in template');
+            return ($result);
         }
+
+        if (!$this->operationSuccessful) {
+            if ($onuFound) {
+                $this->displayMessage = __('Operation unsuccessful');
+            } else {
+                $this->displayMessage = __('ONU not found');
+            }
+        }
+
+        return ($result);
     }
 
-    public function DescribeOnu($description) {
-        if (!empty($this->onuData) AND ! empty($this->oltData) AND ! empty($this->oltSnmptemplate)) {
+    /**
+     * Sets ONU description on OLT
+     *
+     * @param $description
+     *
+     * @return bool|mixed|string
+     *
+     * @throws Exception
+     */
+    public function describeOnu($description) {
+        $result = false;
+        $onuFound = true;
+        $description = trim($description, " \t\n\r\0\x0B\x31\x22");
+        $descrIsEmptyStr = ($description === '');
+
+        if (empty($this->snmpTemplateParsed)) {
+            $this->displayMessage = __('SNMP template is not found or not exists');
+            return ($result);
+        }
+
+        if (empty($this->onuData)) {
+            $this->displayMessage = __('ONU data is empty');
+            return ($result);
+        }
+
+        $macOnu = $this->onuData['mac'];
+        $snmpData = $this->snmpTemplateParsed;
+
+        if (isset($snmpData['onu']['CONTROLMODE'])) {
+            $snmpControlMode = $snmpData['onu']['CONTROLMODE'];
+
+            if ($snmpControlMode == 'STELSFD11') {
+                $this->displayMessage = __('Function is not supported by this OLT') . ': ' . $snmpControlMode;
+                return ($result);
+            }
+
+            if ($snmpControlMode == 'VSOL_1600D') {
+                $description = ($descrIsEmptyStr) ? '""' : $description;
+                $macIndexOID = $snmpData['signal']['MACINDEX'];
+                $macValType  = $snmpData['signal']['MACVALUE'];
+                $descrPONIdx = $snmpData['onu']['DESCRPONINDEX'];
+                $descrONUIdx = $snmpData['onu']['DESCRONUINDEX'];
+                $descrStrIdx = $snmpData['onu']['DESCRSTRING'];
+                $descrCommit = $snmpData['onu']['DESCRCOMMIT'];
+                $descrGetIdx = $snmpData['onu']['DESCRIPTIONGET'];
+                $descrValue  = $snmpData['onu']['DESCRVALUE'];
+
+                $macIndexFull = $this->snmp->walk($this->oltData['ip'], $this->oltData['snmp'], $macIndexOID);
+
+                if (!empty($macIndexFull)) {
+                    $macIndexFull = str_ireplace(array($macIndexOID, $macValType, '"'), ' ', $macIndexFull);
+                    $macIndexFull = explodeRows($macIndexFull);
+                    $describeData = array();
+
+                    foreach ($macIndexFull as $eachRow) {
+                        $indexMAC = explode(' = ', $eachRow);
+
+                        if (!empty($indexMAC[1])) {
+                            $tmpCleanMAC = strtolower(trim($indexMAC[1]));
+
+                            if ($macOnu == $tmpCleanMAC) {
+                                $onuFound = true;
+                                $tmpPONONUIdx = trim($indexMAC[0]);
+                                $tmpIdx = trim(substr($indexMAC[0], 1), '.');
+                                $ponIfaceIndex = substr($tmpIdx, 0, strpos($tmpIdx, '.', 1));
+                                $onuIndex = substr($tmpIdx, strpos($tmpIdx, '.', 1) + 1);
+                                $describeData[] = array('oid' => $descrPONIdx, 'type' => 'i', 'value' => $ponIfaceIndex);
+                                $describeData[] = array('oid' => $descrONUIdx, 'type' => 'i', 'value' => $onuIndex);
+                                $describeData[] = array('oid' => $descrStrIdx, 'type' => 's', 'value' => $description);
+                                $describeData[] = array('oid' => $descrCommit, 'type' => 'i', 'value' => '1');
+
+                                $this->snmp->set($this->oltData['ip'], $this->oltData['snmpwrite'], $describeData);
+                                //very shitty hack
+                                //sleep(4);
+                                $result = $this->snmp->walk($this->oltData['ip'], $this->oltData['snmp'], $descrGetIdx . $tmpPONONUIdx, false);
+
+                                if (!empty($result) or ($result === '' and $descrIsEmptyStr)) {
+                                    $this->operationSuccessful = true;
+                                    $result = str_replace(array($descrGetIdx . $tmpPONONUIdx, $descrValue, '=', '"', ' '), '', $result);
+                                    return ($result);
+                                }
+                            } else {
+                                $onuFound = false;
+                            }
+                        }
+                    }
+                } else {
+                    $onuFound = false;
+                }
+            }
+        } elseif ($this->checkBDCOMEssentialOpts()) {
             $eponInt = '';
-            $macOnu = $this->onuData['mac'];
-            $decMacOnu = $this->MacHexToDec($macOnu);
-            if (!file_exists(CONFIG_PATH . "/snmptemplates/" . $this->oltSnmptemplate)) {
-                return false;
+            $decMacOnu = $this->macHexToDec($macOnu);
+
+            if (empty($decMacOnu)) {
+                $this->displayMessage = __('Wrong MAC format (should be XX:XX:XX:XX:XX:XX)');
+                return ($result);
             }
-            $snmpData = rcms_parse_ini_file(CONFIG_PATH . "/snmptemplates/" . $this->oltSnmptemplate, true);
-            if (!isset($snmpData['onu']['DESCRIPTION'])) {
-                return false;
-            }
-            if (!isset($snmpData['vlan']['SAVE'])) {
-                return false;
-            }
-            if (!isset($snmpData['onu']['EPONINDEX'])) {
-                return false;
-            }
-            if (!isset($snmpData['onu']['IFINDEX'])) {
-                return false;
-            }
+
             if ($snmpData['vlan']['VLANMODE'] == 'BDCOM_B') {
                 $ifIndexOid = $snmpData['onu']['IFINDEX'] . '.' . $decMacOnu;
                 $ifIndexFull = snmp2_get($this->oltData['ip'], $this->oltData['snmp'], $ifIndexOid);
                 $ifIndex = trim(str_replace(array($ifIndexOid, 'INTEGER:', '= '), '', $ifIndexFull));
+
                 if (!empty($ifIndex)) {
                     $eponIntBare = $this->snmp->walk($this->oltData['ip'], $this->oltData['snmp'], $snmpData['onu']['EPONINDEX'] . '.' . $ifIndex);
                     $eponInt = trim(str_replace(array($snmpData['onu']['EPONINDEX'] . '.' . $ifIndex, ' = INTEGER: '), '', $eponIntBare));
                 }
+
                 if (!empty($eponInt)) {
                     $describeData[] = array(
-                        'oid' => $snmpData['onu']['DESCRIPTION'] . '.' . $eponInt . '.' . $decMacOnu,
-                        'type' => 's',
+                        'oid'   => $snmpData['onu']['DESCRIPTION'] . '.' . $eponInt . '.' . $decMacOnu,
+                        'type'  => 's',
                         'value' => '"' . addcslashes($description, '_') . '"',
                     );
+
                     $describeData[] = array(
-                        'oid' => $snmpData['vlan']['SAVE'],
-                        'type' => 'i',
+                        'oid'   => $snmpData['vlan']['SAVE'],
+                        'type'  => 'i',
                         'value' => '1'
                     );
-                    $checkResult = $this->snmp->set($this->oltData['ip'], $this->oltData['snmpwrite'], $describeData);
-                    $checkResult .= $this->snmp->walk($this->oltData['ip'], $this->oltData['snmp'], $snmpData['onu']['DESCRIPTION'] . '.' . $eponInt . '.' . $decMacOnu, FALSE);
-                    if (!empty($checkResult)) {
-                        return $checkResult;
+
+                    $result = $this->snmp->set($this->oltData['ip'], $this->oltData['snmpwrite'], $describeData);
+                    $result.= $this->snmp->walk($this->oltData['ip'], $this->oltData['snmp'], $snmpData['onu']['DESCRIPTION'] . '.' . $eponInt . '.' . $decMacOnu, FALSE);
+
+                    if (!empty($result) or ($result === '' and $descrIsEmptyStr)) {
+                        $this->operationSuccessful = true;
+                        return ($result);
                     }
+                } else {
+                    $onuFound = false;
                 }
-                return false;
             }
 
             if ($snmpData['vlan']['VLANMODE'] == 'BDCOM_C') {
@@ -260,6 +302,7 @@ class OnuDescribe {
                 snmp_set_oid_output_format(SNMP_OID_OUTPUT_NUMERIC);
                 $allOnu = @snmp2_real_walk($this->oltData['ip'], $this->oltData['snmp'], $allOnuOid);
                 $searchArray = array();
+
                 if (!empty($allOnu)) {
                     foreach ($allOnu as $eachIndex => $eachOnu) {
                         $eachIndex = trim(str_replace($allOnuOid . '.', '', $eachIndex));
@@ -268,43 +311,73 @@ class OnuDescribe {
                         $eachOnuMac = implode(":", $eachOnuMacArray);
                         $searchArray[$eachOnuMac] = $eachIndex;
                     }
+
                     if (!empty($searchArray) and isset($searchArray[$macOnu])) {
                         $ifIndex = $searchArray[$macOnu];
                         $eponIntBare = $this->snmp->walk($this->oltData['ip'], $this->oltData['snmp'], $snmpData['onu']['EPONINDEX'] . '.' . $ifIndex);
                         $eponInt = trim(str_replace(array($snmpData['onu']['EPONINDEX'] . '.' . $ifIndex, ' = INTEGER: '), '', $eponIntBare));
                     }
+
                     if (!empty($eponInt)) {
                         $describeData[] = array(
-                            'oid' => $snmpData['onu']['DESCRIPTION'] . '.' . $eponInt . '.' . $decMacOnu,
-                            'type' => 's',
+                            'oid'   => $snmpData['onu']['DESCRIPTION'] . '.' . $eponInt . '.' . $decMacOnu,
+                            'type'  => 's',
                             'value' => '"' . addcslashes($description, '_') . '"',
                         );
                         $describeData[] = array(
-                            'oid' => $snmpData['vlan']['SAVE'],
-                            'type' => 'i',
+                            'oid'   => $snmpData['vlan']['SAVE'],
+                            'type'  => 'i',
                             'value' => '1'
                         );
-                        $checkResult = $this->snmp->set($this->oltData['ip'], $this->oltData['snmpwrite'], $describeData);
-                        $checkResult .= $this->snmp->walk($this->oltData['ip'], $this->oltData['snmp'], $snmpData['onu']['DESCRIPTION'] . '.' . $eponInt . '.' . $decMacOnu, FALSE);
-                        if (!empty($checkResult)) {
-                            return $checkResult;
+                        $result = $this->snmp->set($this->oltData['ip'], $this->oltData['snmpwrite'], $describeData);
+                        $result.= $this->snmp->walk($this->oltData['ip'], $this->oltData['snmp'], $snmpData['onu']['DESCRIPTION'] . '.' . $eponInt . '.' . $decMacOnu, FALSE);
+
+                        if (!empty($result) or ($result === '' and $descrIsEmptyStr)) {
+                            $this->operationSuccessful = true;
+                            return ($result);
                         }
+                    } else {
+                        $onuFound = false;
                     }
                 }
-                return false;
+            }
+        } else {
+            $this->displayMessage = __('Essential SNMP options are missing in template');
+            return ($result);
+        }
+
+        if (!$this->operationSuccessful) {
+            if ($onuFound) {
+                $this->displayMessage = __('Operation unsuccessful');
+            } else {
+                $this->displayMessage = __('ONU not found');
             }
         }
+
+        return ($result);
     }
 
-    public function DescribeForm($login) {
-        $DescriptionInputId = wf_InputId();
-        $Inputs = wf_delimiter();
-        $Inputs .= wf_tag('input', false, '', 'type="text" name="onuDescription" value="' . $login . '" id="' . $DescriptionInputId . '" size="60" style="margin-left: 30px;"');
-        $Inputs .= wf_tag('label', false, '', 'for ="' . $DescriptionInputId . '"') . __('Description') . wf_tag('label', true);
-        $Inputs .= wf_delimiter();
-        $Inputs .= wf_SubmitClassed('true', 'vlanButton', 'DescribeOnu', __('Change onu description'));
-        $Form = wf_Form("", 'POST', $Inputs);
-        return($Form);
-    }
+    /**
+     * Returns ONU description controls
+     *
+     * @param $login
+     *
+     * @return string
+     *
+     * @throws Exception
+     */
+    public function describeForm($login) {
+        $onuDescription = trim($this->getOnuDescription(), " \t\n\r\0\x0B\x31\x22");
+        $onuDescription = (empty($onuDescription)) ? $login : $onuDescription;
 
+        $descriptionInputId = wf_InputId();
+        $inputs = wf_delimiter();
+        $inputs .= wf_tag('input', false, '', 'type="text" name="onuDescription" value="' . $onuDescription . '" id="' . $descriptionInputId . '" size="60" style="margin-left: 10px;"');
+        $inputs .= wf_tag('label', false, '', 'for ="' . $descriptionInputId . '"') . __('Description') . wf_tag('label', true);
+        $inputs .= wf_delimiter();
+        $inputs .= wf_SubmitClassed('true', 'vlanButton', 'DescribeOnu', __('Change onu description'));
+        $form = wf_Form("", 'POST', $inputs);
+
+        return ($form);
+    }
 }

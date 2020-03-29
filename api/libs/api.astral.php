@@ -335,14 +335,15 @@ function wf_HiddenInput($name, $value = '', $CtrlID = '', $CtrlClass = '') {
  * Return submit web form element
  *
  * @param string  $value text label for button
- * @param  string $CtrlID
+ * @param string $CtrlID
+ * @param string $options
  *
  * @return string
  *
  */
-function wf_Submit($value, $CtrlID = '') {
+function wf_Submit($value, $CtrlID = '', $options = '') {
     $SubmitID = ( (empty($CtrlID)) ? 'Submit_' . wf_InputId() : $CtrlID );
-    $result = '<input type="submit" value="' . __($value) . '" id="' . $SubmitID . '">';
+    $result = '<input type="submit" value="' . __($value) . '" id="' . $SubmitID . '" ' . $options . '>';
     return ($result);
 }
 
@@ -624,7 +625,7 @@ function wf_MonthSelector($name, $label, $selected = '', $br = false, $allTime =
 function wf_YearSelector($name, $label = '', $br = false) {
     $curyear = curyear();
     $inputid = wf_InputId();
-    $count = 12;
+    $count = 13;
     if ($br) {
         $newline = '<br>';
     } else {
@@ -657,7 +658,7 @@ function wf_YearSelector($name, $label = '', $br = false) {
 function wf_YearSelectorPreset($name, $label = '', $br = false, $year = '', $allTime = false) {
     $curyear = curyear();
     $inputid = wf_InputId();
-    $count = 12;
+    $count = 13;
     $selected = '';
 
     if ($br) {
@@ -758,6 +759,17 @@ function wf_getBoolFromVar($Variable, $CheckAsTrueFalseStr = false) {
     } else {
         return !!$Variable;
     }
+}
+
+/**
+ * Returns true if $value is empty() or null but not equals to 0 or '0'
+ *
+ * @param string $value
+ *
+ * @return bool
+ */
+function wf_emptyNonZero($value = '') {
+    return ( (empty($value) and $value !== 0 and $value !== '0') ? true : false );
 }
 
 /**
@@ -1521,9 +1533,11 @@ function wf_FullCalendar($data, $options = '', $useHTMLInTitle = false, $useHTML
  * @param string $width   Widget width
  * @param string $height  Widget height
  * @param string $class   Widget class to assign
+ * @param string $opts    Widget style options. Do not include style="..."
+ *
  * @return string
  */
-function wf_Plate($content, $width = '', $height = '', $class = '') {
+function wf_Plate($content, $width = '', $height = '', $class = '', $opts = '') {
     if ($width != '') {
         $width = 'width: ' . $width . ';';
     }
@@ -1538,7 +1552,7 @@ function wf_Plate($content, $width = '', $height = '', $class = '') {
     }
 
     $result = '
-        <div style="' . $width . ' ' . $height . ' float: left;" ' . $class . '>
+        <div style="' . $width . ' ' . $height . ' float: left; ' . $opts . ' " ' . $class . '>
 		' . $content . '
         </div>
         ';
@@ -2594,12 +2608,13 @@ var dataView = new google.visualization.DataView(data);
  * @param string $title Link title
  * @param bool $br Line break line after link
  * @param string $class Link class name
+ * @param string $opts Link style or attributes
  * 
  * @return string
  */
-function wf_BackLink($url, $title = '', $br = false, $class = 'ubButton') {
+function wf_BackLink($url, $title = '', $br = false, $class = 'ubButton', $opts = '') {
     $title = (empty($title)) ? __('Back') : __($title);
-    $result = wf_Link($url, wf_img('skins/back.png') . ' ' . $title, $br, $class);
+    $result = wf_Link($url, wf_img('skins/back.png') . ' ' . $title, $br, $class, $opts);
     return ($result);
 }
 
@@ -3056,6 +3071,18 @@ function wf_StepsMeter($params, $current) {
         $result = $style . $code;
     }
     return ($result);
+}
+
+/**
+ * Returns code that plays some sound from existing audio file
+ * 
+ * @param string $url
+ * 
+ * @return string
+ */
+function wf_doSound($url) {
+    $result = wf_tag('script') . "var audio = new Audio('" . $url . "'); audio.play();" . wf_tag('script', true);
+    return($result);
 }
 
 /**

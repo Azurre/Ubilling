@@ -365,8 +365,10 @@ class TrinityTv {
     const URL_SUBSCRIBER = '?module=trinitytv&subscriberid=';
     const URL_SUBS = 'subscriptions=true';
     const URL_AJSUBS = 'ajsubs=true';
+    const URL_AJDEVS = 'ajdevices=true';
     const URL_SUBVIEW = 'subview=true';
     const URL_REPORTS = 'reports=true';
+    const URL_DEVICES = 'devices=true';
     const TABLE_SUBS = 'trinitytv_subscribers';
     const TABLE_TARIFFS = 'trinitytv_tariffs';
     const TABLE_DEVICES = 'trinitytv_devices';
@@ -641,7 +643,7 @@ class TrinityTv {
                 $actLinks = wf_JSAlert(self::URL_ME . '&' . self::URL_TARIFFS . '&deletetariffid=' . $tariff['id'], web_delete_icon(), $this->messages->getDeleteAlert());
                 $actLinks .= wf_modalAuto(web_edit_icon(), __('Edit tariff'), $this->tariffEditForm($tariff['id']));
                 $cells .= wf_TableCell($actLinks);
-                $rows .= wf_TableRow($cells, 'row3');
+                $rows .= wf_TableRow($cells, 'row5');
             }
         }
 
@@ -987,7 +989,7 @@ class TrinityTv {
      */
     protected function renderDeviceByCodeAddForm($subscriberId) {
         $result = '';
-        $inputs = wf_HiddenInput('device', 'true');
+        $inputs = wf_HiddenInput('manualassigndevice', 'true');
         $inputs .= wf_HiddenInput('subscriberid', $subscriberId);
         $userlogin = $this->getSubscriberLogin($subscriberId);
         $inputs .= wf_HiddenInput('userlogin', $userlogin);
@@ -1029,15 +1031,25 @@ class TrinityTv {
         $subscriberId = vf($subscriberId, 3); //int
         $code = vf(strtoupper($code)); //alphanumeric
 
-        $response = $this->api->addCodeMacDevice($subscriberId, $code);
+        if (isset($this->allSubscribers[$subscriberId])) {
+            $response = $this->api->addCodeMacDevice($subscriberId, $code);
 
-        if (isset($response->result) AND $response->result == 'success') {
+            if (isset($response->result) AND $response->result == 'success') {
 
-            $result = $this->addDevice($userLogin, $response->mac);
+                $mac = vf(strtoupper($response->mac)); //alphanumeric
+                
+                $query = "INSERT INTO `" . self::TABLE_DEVICES . "` (`login`, `subscriber_id`, `mac`, `created_at`) VALUES ";
+                $query .= "('" . $this->allSubscribers[$subscriberId]['login'] . "', '" . $subscriberId . "','" . $mac . "', NOW() )";
+                nr_query($query);
+
+                $userLogin = $this->getSubscriberLogin($subscriberId);
+                log_register('TRINITYTV DEVICE ADD `' . $mac . '` FOR (' . $userLogin . ') AS [' . $subscriberId . ']');
+            } else {
+                $result = __('Strange exeption') . ': ' . @$response->result;
+            }
         } else {
-            $result = __('Strange exeption') . ': ' . @$response->result;
+            $result .= __('Something went wrong') . ': ' . __('User not exists');
         }
-
 
         return ($result);
     }
@@ -1225,9 +1237,11 @@ class TrinityTv {
      */
     public function renderPanel() {
         $result = '';
-        $result .= wf_Link(self::URL_ME . '&subscriptions=true', wf_img('skins/ukv/users.png') . ' ' . __('Subscriptions'), false, 'ubButton') . ' ';
-        $result .= wf_Link(self::URL_ME . '&tariffs=true', wf_img('skins/ukv/dollar.png') . ' ' . __('Tariffs'), false, 'ubButton') . ' ';
-        $result .= wf_Link(self::URL_ME . '&reports=true', wf_img('skins/ukv/report.png') . ' ' . __('Reports'), false, 'ubButton') . ' ';
+        $result .= wf_Link(self::URL_ME . '&' . self::URL_SUBS, wf_img('skins/ukv/users.png') . ' ' . __('Subscriptions'), false, 'ubButton') . ' ';
+        $result .= wf_Link(self::URL_ME . '&' . self::URL_TARIFFS, wf_img('skins/ukv/dollar.png') . ' ' . __('Tariffs'), false, 'ubButton') . ' ';
+        $result .= wf_Link(self::URL_ME . '&' . self::URL_DEVICES, wf_img('skins/switch_models.png') . ' ' . __('Devices'), false, 'ubButton') . ' ';
+        $result .= wf_Link(self::URL_ME . '&' . self::URL_REPORTS, wf_img('skins/ukv/report.png') . ' ' . __('Reports'), false, 'ubButton') . ' ';
+
         return ($result);
     }
 
@@ -1341,7 +1355,7 @@ class TrinityTv {
 
             $query = "DELETE from `" . self::TABLE_DEVICES . "` WHERE `id`='" . $deviceId . "';";
             nr_query($query);
-            log_register('TRINITYTV DEVICE DELETE [' . $allDevices[$deviceId]['mac'] . ']');
+            log_register('TRINITYTV DEVICE DELETE `' . $allDevices[$deviceId]['mac'] . '` FOR (' . $userLogin . ')');
 
             if (isset($response->result) AND $response->result == 'success') {
                 
@@ -1369,13 +1383,13 @@ class TrinityTv {
 
         $allDevices = $this->getDevices();
         if (isset($allDevices[$deviceId])) {
-
+            $deviceData = $allDevices[$deviceId];
             // Delete a subscription on the Trinity
             $response = $this->api->deleteMacDevice($allDevices[$deviceId]['subscriber_id'], $allDevices[$deviceId]['mac']);
 
             $query = "DELETE from `" . self::TABLE_DEVICES . "` WHERE `id`='" . $deviceId . "';";
             nr_query($query);
-            log_register('TRINITYTV DEVICE DELETE [' . $allDevices[$deviceId]['mac'] . ']');
+            log_register('TRINITYTV DEVICE DELETE `' . $allDevices[$deviceId]['mac'] . '` FOR (' . $deviceData['login'] . ')');
 
             if (isset($response->result) AND $response->result == 'success') {
                 
@@ -1590,7 +1604,7 @@ class TrinityTv {
 
         // Кнопка создать подписку
         $result .= wf_modalAuto(wf_img('skins/ukv/add.png') . ' ' . __('Users registration'), __('Registration'), $this->renderUserRegisterForm(), 'ubButton');
-        $result .= " <br><br>";
+        $result .= wf_delimiter();
 
         if ($this->renderDevices) {
             $columns = array(
@@ -1623,6 +1637,26 @@ class TrinityTv {
     }
 
     /**
+     * Returns array of devices assigned for subscribers as subscriberId=>devcount
+     * 
+     * @return array
+     */
+    protected function getUserDevicesCount() {
+        $result = array();
+        $allDevices = $this->getDevices();
+        if (!empty($allDevices)) {
+            foreach ($allDevices as $io => $each) {
+                if (isset($result[$each['subscriber_id']])) {
+                    $result[$each['subscriber_id']] ++;
+                } else {
+                    $result[$each['subscriber_id']] = 1;
+                }
+            }
+        }
+        return($result);
+    }
+
+    /**
      * Renders ajax data subscriptions
      *
      * @return void
@@ -1633,13 +1667,7 @@ class TrinityTv {
 
         if (!empty($this->allSubscribers)) {
             if ($this->renderDevices) {
-                $remoteUserData = $this->api->listUsers();
-                $remoteUserData = json_decode(json_encode($remoteUserData), true);
-                if (!empty($remoteUserData)) {
-                    if (isset($remoteUserData['subscribers'])) {
-                        $remoteUserData = $remoteUserData['subscribers'];
-                    }
-                }
+                $devCounters = $this->getUserDevicesCount();
             }
             foreach ($this->allSubscribers as $subscriber) {
 
@@ -1656,10 +1684,10 @@ class TrinityTv {
                 $data[] = $subscriber['actdate'];
                 if ($this->renderDevices) {
                     $devicesCount = 0;
-                    if (isset($remoteUserData[$subscriber['id']])) {
-                        $devicesCount = $remoteUserData[$subscriber['id']]['devicescount'];
+                    if (isset($devCounters[$subscriber['id']])) {
+                        $devicesCount = $devCounters[$subscriber['id']];
                     } else {
-                        $devicesCount = __('Fail');
+                        $devicesCount = 0;
                     }
                     $data[] = $devicesCount;
                 }
@@ -1671,6 +1699,45 @@ class TrinityTv {
             }
         }
 
+        $json->getJson();
+    }
+
+    /**
+     * Renders devices report container
+     * 
+     * @return string
+     */
+    public function renderDevicesList() {
+        $result = '';
+        $columns = array('ID', 'MAC', 'Date', 'Real Name', 'Full address', 'Subscriptions');
+        $opts = '"order": [[ 0, "desc" ]]';
+        $result .= wf_JqDtLoader($columns, self::URL_ME . '&' . self::URL_DEVICES . '&' . self::URL_AJDEVS, false, __('Devices'), 100, $opts);
+        return($result);
+    }
+
+    /**
+     * Returns JSON data with available devices info
+     * 
+     * @return void
+     */
+    public function devicesListAjax() {
+        $json = new wf_JqDtHelper();
+        $allDevices = $this->getDevices();
+        if (!empty($allDevices)) {
+            foreach ($allDevices as $io => $each) {
+
+                $data[] = $each['id'];
+                $data[] = $each['mac'];
+                $data[] = $each['created_at'];
+                $data[] = @$this->allUsers[$each['login']]['realname'];
+                $userLink = wf_Link(self::URL_PROFILE . $each['login'], web_profile_icon() . ' ' . @$this->allUsers[$each['login']]['fulladress']);
+                $data[] = $userLink;
+                $subLink = wf_Link(self::URL_SUBSCRIBER . $each['subscriber_id'], web_edit_icon());
+                $data[] = $subLink;
+                $json->addRow($data);
+                unset($data);
+            }
+        }
         $json->getJson();
     }
 
