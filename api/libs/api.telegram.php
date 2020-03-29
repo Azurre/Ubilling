@@ -3,6 +3,13 @@
 class UbillingTelegram {
 
     /**
+     * Contains system alter config as key=>value
+     *
+     * @var array
+     */
+    protected $altCfg = array();
+
+    /**
      * Contains current instance bot token
      *
      * @var string
@@ -19,7 +26,7 @@ class UbillingTelegram {
     /**
      * Contains base Telegram API URL 
      */
-    const URL_API = 'https://api.telegram.org/bot';
+    protected $apiUrl = 'https://api.telegram.org/bot';
 
     /**
      * Contains telegram messages path
@@ -35,6 +42,8 @@ class UbillingTelegram {
         if (!empty($token)) {
             $this->botToken = $token;
         }
+        $this->loadAlter();
+        $this->setOptions();
     }
 
     /**
@@ -57,6 +66,49 @@ class UbillingTelegram {
      */
     public function setDebug($state) {
         $this->debug = $state;
+    }
+
+    /**
+     * Loads system alter config into protected property for further usage
+     * 
+     * @global object $ubillingConfig
+     * 
+     * @return void
+     */
+    protected function loadAlter() {
+        global $ubillingConfig;
+        $this->altCfg = $ubillingConfig->getAlter();
+    }
+
+    /**
+     * Sets some current instance options if required
+     * 
+     * @return void
+     */
+    protected function setOptions() {
+        //settin debug flag
+        if (isset($this->altCfg['TELEGRAM_DEBUG'])) {
+            if ($this->altCfg['TELEGRAM_DEBUG']) {
+                $this->debug = true;
+            }
+        }
+
+        if (isset($this->altCfg['TELEGRAM_API_URL'])) {
+            if (!empty($this->altCfg['TELEGRAM_API_URL'])) {
+                $this->setApiUrl($this->altCfg['TELEGRAM_API_URL']);
+            }
+        }
+    }
+
+    /**
+     * Setter of custom API URL (legacy fallback)
+     * 
+     * @param string $url
+     * 
+     * @return void
+     */
+    protected function setApiUrl($url) {
+        $this->apiUrl = $url;
     }
 
     /**
@@ -169,16 +221,29 @@ class UbillingTelegram {
         $offset = (!empty($offset)) ? '&offset=' . $offset : '';
         if (!empty($this->botToken)) {
             $options = '?timeout=' . $timeout . '&limit=' . $limit . $offset;
-            $url = self::URL_API . $this->botToken . '/getUpdates' . $options;
+            $url = $this->apiUrl . $this->botToken . '/getUpdates' . $options;
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
             curl_setopt($ch, CURLOPT_URL, $url);
             curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/json'));
             curl_setopt($ch, CURLOPT_POST, 1);
             @$reply = curl_exec($ch);
+            if ($this->debug) {
+                $curlError = curl_error($ch);
+                show_info($url);
+                if (!empty($curlError)) {
+                    show_error(__('Error') . ' ' . __('Telegram') . ': ' . $curlError);
+                } else {
+                    show_success(__('Telegram API connection to') . ' ' . $this->apiUrl . ' ' . __('success'));
+                }
+            }
             curl_close($ch);
             if (!empty($reply)) {
                 $result = json_decode($reply, true);
+            }
+
+            if ($this->debug) {
+                debarr($result);
             }
         } else {
             throw new Exception('EX_TOKEN_EMPTY');
@@ -270,11 +335,26 @@ class UbillingTelegram {
     public function getBotContacts() {
         $result = array();
         $updatesRaw = $this->getUpdatesRaw();
-        //debarr($updatesRaw);
+
         if (!empty($updatesRaw)) {
             if (isset($updatesRaw['result'])) {
                 if (!empty($updatesRaw['result'])) {
                     foreach ($updatesRaw['result'] as $io => $each) {
+                        //supergroup messages
+                        if (isset($each['message'])) {
+                            if (isset($each['message']['chat'])) {
+                                if (isset($each['message']['chat']['type'])) {
+                                    if ($each['message']['chat']['type'] = 'supergroup') {
+                                        $groupData = $each['message']['chat'];
+                                        $result[$groupData['id']]['chatid'] = $groupData['id'];
+                                        $groupName = (!empty($groupData['username'])) ? $groupData['username'] : @$groupData['title']; //only title for private groups
+                                        $result[$groupData['id']]['name'] = $groupName;
+                                        $result[$groupData['id']]['type'] = 'supergroup';
+                                        $result[$groupData['id']]['lastmessage'] = strip_tags(@$each['message']['text']);
+                                    }
+                                }
+                            }
+                        }
                         //direct user message
                         if (isset($each['message'])) {
                             if (isset($each['message']['from'])) {
@@ -283,23 +363,11 @@ class UbillingTelegram {
                                     $result[$messageData['id']]['chatid'] = $messageData['id'];
                                     $result[$messageData['id']]['name'] = @$messageData['username']; //may be empty
                                     $result[$messageData['id']]['type'] = 'user';
+                                    $result[$messageData['id']]['lastmessage'] = strip_tags(@$each['message']['text']);
                                 }
                             }
                         }
-                        //supergroup messages
-                        if (isset($each['message'])) {
-                            if (isset($each['message']['chat'])) {
 
-                                if (isset($each['message']['chat']['type'])) {
-                                    if ($each['message']['chat']['type'] = 'supergroup') {
-                                        $groupData = $each['message']['chat'];
-                                        $result[$groupData['id']]['chatid'] = $groupData['id'];
-                                        $result[$groupData['id']]['name'] = @$groupData['username'];
-                                        $result[$groupData['id']]['type'] = 'supergroup';
-                                    }
-                                }
-                            }
-                        }
                         //channel message
                         if (isset($each['channel_post'])) {
                             if (isset($each['channel_post']['chat'])) {
@@ -308,6 +376,7 @@ class UbillingTelegram {
                                     $result[$chatData['id']]['chatid'] = $chatData['id'];
                                     $result[$chatData['id']]['name'] = $chatData['username'];
                                     $result[$chatData['id']]['type'] = 'channel';
+                                    $result[$messageData['id']]['lastmessage'] = strip_tags(@$each['message']['text']);
                                 }
                             }
                         }
@@ -315,6 +384,7 @@ class UbillingTelegram {
                 }
             }
         }
+
         return ($result);
     }
 
@@ -348,6 +418,17 @@ class UbillingTelegram {
             $method = 'sendLocation' . $locationParams;
         }
 
+        //custom markdown
+        if (ispos($message, 'parseMode:{')) {
+            if (preg_match('!\{(.*?)\}!si', $message, $tmpMode)) {
+                $cleanParseMode = $tmpMode[1];
+                $parseModeMask = 'parseMode:{' . $cleanParseMode . '}';
+                $cleanMessage = str_replace($parseModeMask, '', $message);
+                $data['text'] = $cleanMessage;
+                $method = 'sendMessage?parse_mode=' . $cleanParseMode;
+            }
+        }
+
         //venue sending
         if (ispos($message, 'sendVenue:')) {
             if (preg_match('!\[(.*?)\]!si', $message, $tmpGeo)) {
@@ -377,7 +458,7 @@ class UbillingTelegram {
         $data_json = json_encode($data);
 
         if (!empty($this->botToken)) {
-            $url = self::URL_API . $this->botToken . '/' . $method;
+            $url = $this->apiUrl . $this->botToken . '/' . $method;
             if ($this->debug) {
                 deb($url);
             }
@@ -389,6 +470,12 @@ class UbillingTelegram {
             curl_setopt($ch, CURLOPT_POSTFIELDS, $data_json);
             if ($this->debug) {
                 deb(curl_exec($ch));
+                $curlError = curl_error($ch);
+                if (!empty($curlError)) {
+                    show_error(__('Error') . ' ' . __('Telegram') . ': ' . $curlError);
+                } else {
+                    show_success(__('Telegram API sending via') . ' ' . $this->apiUrl . ' ' . __('success'));
+                }
             } else {
                 curl_exec($ch);
             }

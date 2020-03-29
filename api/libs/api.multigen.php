@@ -2616,16 +2616,18 @@ class MultiGen {
      * 
      * @param int $nasId
      * 
-     * @return string
+     * @return array/string if empty
      */
     protected function getNasCopyString($nasId) {
-        $result = '';
+        $result = array();
         if (isset($this->nasOptions[$nasId])) {
             $result['options'] = $this->nasOptions[$nasId];
             $result['attributes'] = $this->getNasAttributes($nasId);
             $result['services'] = $this->getNasServices($nasId);
             $result = json_encode($result);
             $result = base64_encode($result);
+        } else {
+            $result='';
         }
         return ($result);
     }

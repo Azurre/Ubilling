@@ -540,7 +540,7 @@ function web_EditorCashDataForm($fieldnames, $fieldkey, $useraddress, $olddata =
     $radio .= $setCashControl;
 
     //cash input widget
-    $cashInputControl = wf_tag('input', false, '', ' type="text" name="' . $fieldkey . '"autofocus size="5" id="cashfield" ' . $cashfieldanchor . '');
+    $cashInputControl = wf_tag('input', false, '', ' type="text" name="' . $fieldkey . '" size="5" id="cashfield" ' . $cashfieldanchor . ' autofocus');
     $cashInputControl .= ' ' . __('The expected payment') . ': ' . $tariff_price;
 
 
@@ -605,16 +605,18 @@ function web_EditorCashDataForm($fieldnames, $fieldkey, $useraddress, $olddata =
  * 
  * @param string $name
  * @param int    $state
+ * @param bool   $disableYes
+ *
  * @return string
  */
-function web_TriggerSelector($name, $state = '') {
+function web_TriggerSelector($name, $state = '', $disableYes = false) {
     $noflag = (!$state) ? 'SELECTED' : '';
+    $disableYes = ($disableYes) ? ' disabled ' : '';
 
     $selector = wf_tag('select', false, '', 'name="' . $name . '"');
-    $selector .= wf_tag('option', false, '', 'value="1"') . __('Yes') . wf_tag('option', true);
+    $selector .= wf_tag('option', false, '', 'value="1"' . $disableYes) . __('Yes') . wf_tag('option', true);
     $selector .= wf_tag('option', false, '', 'value="0" ' . $noflag) . __('No') . wf_tag('option', true);
     $selector .= wf_tag('select', true);
-
 
     return ($selector);
 }
@@ -626,9 +628,11 @@ function web_TriggerSelector($name, $state = '') {
  * @param string $fieldkey
  * @param string $useraddress
  * @param string $olddata
+ * @param bool   $disableYes
+ *
  * @return string
  */
-function web_EditorTrigerDataForm($fieldname, $fieldkey, $useraddress, $olddata = '') {
+function web_EditorTrigerDataForm($fieldname, $fieldkey, $useraddress, $olddata = '', $disableYes = false) {
     $curstate = web_trigger($olddata);
 
     $cells = wf_TableCell(__('User'), '', 'row2');
@@ -638,7 +642,7 @@ function web_EditorTrigerDataForm($fieldname, $fieldkey, $useraddress, $olddata 
     $cells .= wf_TableCell($curstate, '', 'row3');
     $rows .= wf_TableRow($cells);
     $cells = wf_TableCell('', '', 'row2');
-    $cells .= wf_TableCell(web_TriggerSelector($fieldkey, $olddata), '', 'row3');
+    $cells .= wf_TableCell(web_TriggerSelector($fieldkey, $olddata, $disableYes), '', 'row3');
     $rows .= wf_TableRow($cells);
     $table = wf_TableBody($rows, '100%', 0);
 
@@ -1863,7 +1867,22 @@ function web_PaymentsShowGraph($year) {
             }
         }
         //extracting all of needed payments in one query
-        $allYearPayments_q = "SELECT * from `payments` WHERE `date` LIKE '" . $year . "-%' AND `summ`>'0' " . $dopWhere;
+        if ($ubillingConfig->getAlterParam('REPORT_FINANCE_CONSIDER_NEGATIVE')) {
+            // ugly way to get payments with negative sums
+            // performance degradation is kinda twice
+            $allYearPayments_q = "(SELECT * FROM `payments` 
+                                        WHERE `date` LIKE '" . $year . "-%' AND `summ` < '0' 
+                                            AND note NOT LIKE 'Service:%' 
+                                            AND note NOT LIKE 'PENALTY%' 
+                                            AND note NOT LIKE 'OMEGATV%' 
+                                            AND note NOT LIKE 'MEGOGO%' 
+                                            AND note NOT LIKE 'TRINITYTV%' " . $dopWhere . ") 
+                                  UNION ALL 
+                                  (SELECT * FROM `payments` WHERE `date` LIKE '" . $year . "-%' AND `summ` > '0' " . $dopWhere . ")";
+        } else {
+            $allYearPayments_q = "SELECT * FROM `payments` WHERE `date` LIKE '" . $year . "-%' AND `summ` > '0' " . $dopWhere;
+        }
+
         $allYearPayments = simple_queryall($allYearPayments_q);
         if (!empty($allYearPayments)) {
             foreach ($allYearPayments as $idx => $eachYearPayment) {
@@ -2325,8 +2344,8 @@ function web_UserTraffStats($login) {
                     $query_hideki = "SELECT `D0`,`U0` from `" . $ishimuraTable . "` WHERE `login`='" . $login . "' AND `month`='" . date("n") . "' AND `year`='" . curyear() . "'";
                     $dataHideki = simple_query($query_hideki);
                     if (isset($downup['D0'])) {
-                        $downup['D0'] += $dataHideki['D0'];
-                        $downup['U0'] += $dataHideki['U0'];
+                        @$downup['D0'] += $dataHideki['D0'];
+                        @$downup['U0'] += $dataHideki['U0'];
                     } else {
                         $downup['D0'] = $dataHideki['D0'];
                         $downup['U0'] = $dataHideki['U0'];
@@ -3041,6 +3060,18 @@ function zb_BillingCheckUpdates($return = false) {
 }
 
 /**
+ * Installs newly generated Ubilling serial into database
+ * 
+ * @return string
+ */
+function zb_InstallBillingSerial() {
+    $randomid = 'UB' . md5(curdatetime() . zb_rand_string(8));
+    $newhostid_q = "INSERT INTO `ubstats` (`id` ,`key` ,`value`) VALUES (NULL , 'ubid', '" . $randomid . "');";
+    nr_query($newhostid_q);
+    return($randomid);
+}
+
+/**
  * Collects billing stats
  * 
  * @param bool $quiet
@@ -3054,11 +3085,8 @@ function zb_BillingStats($quiet = false) {
     $hostid_q = "SELECT * from `ubstats` WHERE `key`='ubid'";
     $hostid = simple_query($hostid_q);
     if (empty($hostid)) {
-        //register new ubilling
-        $randomid = 'UB' . md5(curdatetime() . zb_rand_string(8));
-        $newhostid_q = "INSERT INTO `ubstats` (`id` ,`key` ,`value`) VALUES (NULL , 'ubid', '" . $randomid . "');";
-        nr_query($newhostid_q);
-        $thisubid = $randomid;
+        //register new Ubilling
+        $thisubid = zb_InstallBillingSerial();
     } else {
         $thisubid = $hostid['value'];
     }
@@ -4594,6 +4622,59 @@ function zb_TariffGetPeriodsAll() {
 }
 
 /**
+ * logs succeful self credit fact into database
+ *
+ * @param  string $login existing users login
+ *
+ * @return void
+ */
+function zb_CreditLogPush($login) {
+    $login = mysql_real_escape_string($login);
+    $date = curdatetime();
+    $query = "INSERT INTO `zbssclog` (`id` , `date` , `login` ) VALUES ( NULL , '" . $date . "', '" . $login . "');";
+    nr_query($query);
+}
+
+/**
+ * Checks if user use SC module without previous payment and returns false if used or true if feature available
+ *
+ * @param  string $login existing users login
+ *
+ * @return bool
+ */
+function zb_CreditLogCheckHack($login) {
+    $login = mysql_real_escape_string($login);
+    $query = "SELECT `note` FROM `payments` WHERE `login` = '" . $login . "' AND (`summ` > 0 OR `note` = 'SCFEE') ORDER BY `payments`.`date` DESC LIMIT 1";
+    $data = simple_query($query);
+    if (empty($data)) {
+        return (true);
+    } elseif (!empty($data) AND $data['note'] != 'SCFEE') {
+        return (true);
+    } else {
+        return (false);
+    }
+}
+
+/**
+ * Checks is user tariff allowed for use of credit feature
+ *
+ * @param array  $sc_allowed
+ * @param string $usertariff
+ * @return bool
+ */
+function zb_CreditCheckAllowed($sc_allowed, $usertariff) {
+    $result = true;
+    if (!empty($sc_allowed)) {
+        if (isset($sc_allowed[$usertariff])) {
+            $result = true;
+        } else {
+            $result = false;
+        }
+    }
+    return ($result);
+}
+
+/**
  * checks is user current month use SC module and returns false if used or true if feature available
  * 
  * @param  string $login existing users login
@@ -5279,10 +5360,14 @@ function zb_ListCacheInform($param = '') {
             $cells = wf_TableCell($id);
             if ($param == 'data') {
                 $cells .= wf_TableCell($key['key'], '', '', 'sorttable_customkey="' . $id . '"');
-                $dataCount = sizeof($key['value']);
+                if (is_array($key['value'])) { // needed to prevent e_warnings on PHP 7.3
+                    $dataCount = sizeof($key['value']);
+                } else {
+                    $dataCount = strlen($key['value']);
+                }
                 $readableData = print_r($key['value'], true);
                 $dataSize = stg_convert_size(strlen($readableData));
-                $value = wf_tag('pre') . $readableData . wf_tag('pre', true);
+                $value = wf_tag('pre') . htmlspecialchars($readableData) . wf_tag('pre', true);
                 $cells .= wf_TableCell($dataCount . ' ~ ' . $dataSize);
                 $keyActions = '';
                 $viewControls = wf_modal(wf_img_sized('skins/icon_search_small.gif', '', '10') . ' ' . __('Cache data'), __('Cache information') . ': ' . $key['key'], $value, 'ubButton', '800', '600') . ' ';

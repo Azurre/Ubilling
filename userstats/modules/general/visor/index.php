@@ -56,6 +56,7 @@ if (@$us_config['VISOR_ENABLED']) {
         const TABLE_USERS = 'visor_users';
         const TABLE_CAMS = 'visor_cams';
         const TABLE_DVRS = 'visor_dvrs';
+        const TABLE_CHANS = 'visor_chans';
 
         public function __construct($login) {
             $this->loadConfigs();
@@ -169,6 +170,92 @@ if (@$us_config['VISOR_ENABLED']) {
         }
 
         /**
+         * Gets channels preview as JSON from remote API call
+         * 
+         * @param string $channelGuid
+         * @param bool $maxQuality
+         * 
+         * @return string
+         */
+        public function getMyChannelsPreview($channelGuid = '', $maxQuality = false) {
+            $result = '';
+            $channelGuid = vf($channelGuid);
+            $channelFilter = (!empty($channelGuid)) ? $channelGuid : '';
+
+            if ($channelFilter) {
+                $result .= la_Link('?module=visor&previewchannels=true', __('Back'), true, 'anunreadbutton');
+            }
+
+            if (@$this->userstatsCfg['API_URL'] AND @ $this->userstatsCfg['API_KEY']) {
+                if (!empty($this->myUserData)) {
+                    if (isset($this->myUserData['id'])) {
+                        $myVisorId = $this->myUserData['id'];
+                        $requestUrl = '&action=visorchans&userid=' . $myVisorId . '&param=preview';
+                        if ($maxQuality) {
+                            $requestUrl .= '&fullsize=true';
+                        }
+                        $channels = zbs_remoteApiRequest($requestUrl);
+                        if (!empty($channels)) {
+                            @$channels = json_decode($channels);
+                            if (!empty($channels)) {
+                                foreach ($channels as $eachChanGuid => $eachUrl) {
+                                    $filteredChan = true;
+                                    $previewWidth = '300px';
+
+                                    if ($channelFilter) {
+                                        $previewWidth = '100%';
+                                        if ($eachChanGuid == $channelFilter) {
+                                            $filteredChan = true;
+                                        } else {
+                                            $filteredChan = false;
+                                        }
+                                    }
+
+
+                                    if (!empty($eachUrl)) {
+                                        if ($filteredChan) {
+                                            $result .= la_tag('div', false, '', 'style="float:left; width:' . $previewWidth . '; margin:5px;"');
+                                            $result .= la_img_sized($eachUrl, '', '90%');
+                                            $result .= la_tag('br');
+                                            $result .= la_tag('br');
+                                            if (!$channelFilter) {
+                                                $fullQualUrl = '?module=visor&previewchannels=true&fullpreview=' . $eachChanGuid;
+                                                $result .= la_Link($fullQualUrl, __('View'), false, 'anreadbutton');
+                                            }
+                                            $result .= la_tag('div', true);
+                                            
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                die(__('ERROR: API_KEY/API_URL not set or empty!'));
+            }
+
+            return($result);
+        }
+
+        /**
+         * Returns count of channels assigned for current instance user
+         * 
+         * @return string
+         */
+        protected function getChansCount() {
+            $result = 0;
+            if (!empty($this->myUserData)) {
+                if (isset($this->myUserData['id'])) {
+                    $query = "SELECT COUNT(`id`) FROM `" . self::TABLE_CHANS . "` WHERE `visorid`='" . $this->myUserData['id'] . "'";
+                    $count = simple_query($query);
+                    $result = $count['COUNT(`id`)'];
+                }
+            }
+            return($result);
+        }
+
+        /**
          * Renders basic user profile data
          * 
          * @return string
@@ -208,8 +295,24 @@ if (@$us_config['VISOR_ENABLED']) {
                                 $rows .= la_TableRow($cells, 'row3');
                             }
                         }
+                        $result .= la_TableBody($rows, '100%', 0, 'resp-table');
 
-                        $result .= la_TableBody($rows, '100%', 0, '');
+                        $myChansCount = $this->getChansCount();
+                        //user have some channels assigned
+                        if ($myChansCount > 0) {
+                            $result .= la_tag('br');
+                            if (!la_CheckGet(array('previewchannels'))) {
+                                $result .= la_Link('?module=visor&previewchannels=true', __('View'), false, 'anreadbutton');
+                            } else {
+                                if (!la_CheckGet(array('fullpreview'))) {
+                                    $backUrl = '?module=visor';
+                                } else {
+                                    $backUrl = '?module=visor&previewchannels=true';
+                                }
+                                $result .= la_Link($backUrl, __('Back'), false, 'anunreadbutton') . ' ';
+                                $result .= la_Link('?module=visor&software=true', __('Downloads'), false, 'anreadbutton');
+                            }
+                        }
                     } else {
                         $result .= __('You have no cameras assigned for this user profile');
                     }
@@ -222,10 +325,89 @@ if (@$us_config['VISOR_ENABLED']) {
             return($result);
         }
 
+        /**
+         * Renders some DVR auth data if user have some channels assigned.
+         * 
+         * @return void
+         */
+        public function renderDvrAuthData() {
+            $result = '';
+            $myVisorId = $this->myUserData['id'];
+            $requestUrl = '&action=visorchans&userid=' . $myVisorId . '&param=authdata';
+            $rawData = zbs_remoteApiRequest($requestUrl);
+            if (!empty($rawData)) {
+                $authData = json_decode($rawData, true);
+                if (!empty($authData)) {
+                    $cells = la_TableCell(__('Host'));
+                    $cells .= la_TableCell(__('Port'));
+                    $cells .= la_TableCell(__('Login'));
+                    $cells .= la_TableCell(__('Password'));
+                    $cells .= la_TableCell(__('Actions'));
+                    $rows = la_TableRow($cells, 'row1');
+
+                    foreach ($authData as $io => $each) {
+                        $cells = la_TableCell($each['ip']);
+                        $cells .= la_TableCell($each['port']);
+                        $cells .= la_TableCell($each['login']);
+                        $cells .= la_TableCell($each['password']);
+                        $actLink = (!empty($each['weburl'])) ? la_Link($each['weburl'], __('Go to'), false, '', 'target="_BLANK"') : '';
+                        $cells .= la_TableCell($actLink);
+                        $rows .= la_TableRow($cells, 'row3');
+                    }
+
+                    $result .= la_TableBody($rows, '100%', 0,'resp-table');
+                }
+            }
+            return($result);
+        }
+
+        /**
+         * Renders available software list
+         * 
+         * @return string
+         */
+        public function renderSoftwareList() {
+            $result = '';
+            if (@$this->userstatsCfg['VISOR_SOFTWARE']) {
+                $rawSoft = explode(',', $this->userstatsCfg['VISOR_SOFTWARE']);
+                if (!empty($rawSoft)) {
+                    $result .= la_tag('br');
+                    foreach ($rawSoft as $ia => $eachLink) {
+                        $eachLink = explode('|', $eachLink);
+                        $result .= la_Link($eachLink[1], la_img($eachLink[0], $eachLink[2]), false, '', 'target="_BLANK"') . ' ';
+                    }
+                }
+            }
+            return($result);
+        }
+
     }
 
     $visor = new ZBSVisorInterface($user_login);
-    show_window(__('Surveillance'), $visor->renderProfile());
+    //Surveillance user profile
+    if (!la_CheckGet(array('fullpreview')) AND ! la_CheckGet(array('software'))) {
+        show_window(__('Surveillance'), $visor->renderProfile());
+    }
+
+    //channels preview
+    if (la_CheckGet(array('previewchannels'))) {
+        if (!la_CheckGet(array('fullpreview'))) {
+            show_window(__('View'), $visor->getMyChannelsPreview()); //low qual
+        } else {
+            show_window(__('View'), $visor->getMyChannelsPreview($_GET['fullpreview'], true)); //only one full qual
+        }
+    }
+
+    if (la_CheckGet(array('software'))) {
+        $authData = $visor->renderDvrAuthData();
+        if (!empty($authData)) {
+            show_window('', la_Link('?module=visor&previewchannels=true', __('Back'), true, 'anunreadbutton'));
+            if (@$us_config['VISOR_SOFTWARE']) {
+                show_window(__('Downloads'), $visor->renderSoftwareList());
+            }
+            show_window(__('Settings'), $authData);
+        }
+    }
 } else {
     show_window(__('Sorry'), __('This module is disabled'));
 }

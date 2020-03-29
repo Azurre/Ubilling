@@ -1934,19 +1934,36 @@ function zbs_CustomBackground() {
  * 
  * @return bool
  */
-function zbs_AnnouncementsAvailable() {
-    $query = "SELECT `id` from `zbsannouncements` WHERE `public`='1';";
+function zbs_AnnouncementsAvailable($login) {
+    global $us_config;
+    $login = mysql_real_escape_string($login);
+    $query = "SELECT `zbsannouncements`.*, `zbh`.`annid` from `zbsannouncements` LEFT JOIN (SELECT `annid` FROM `zbsannhist` WHERE `login` = '" . $login . "') as zbh ON ( `zbsannouncements`.`id`=`zbh`.`annid`) WHERE `public`='1' AND `annid` IS NULL ORDER BY `zbsannouncements`.`id` DESC LIMIT 1";
     $data = simple_queryall($query);
-    $result = false;
     if (!empty($data)) {
-        foreach ($data as $io => $each) {
-            if (!isset($_COOKIE['zbsanread_' . $each['id']])) {
-                $result = true;
-                break;
+        if (isset($us_config['AN_MODAL']) AND !empty($us_config['AN_MODAL'])) {
+            $inputs = '';
+            $inputs.= la_tag('br');
+            $inputs.= la_HiddenInput('anmarkasread', $data[0]['id']);
+
+            if ($data[0]['type'] == 'text') {
+                $eachtext = strip_tags($data[0]['text']);
+                $inputs.= nl2br($eachtext);
             }
+
+            if ($data[0]['type'] == 'html') {
+                $inputs.= $data[0]['text'];
+            }
+            $inputs.= la_tag('br');
+            $inputs.= la_tag('br');
+            $inputs.= la_Submit('Mark as read');
+            $form = la_Form('?module=announcements', "POST", $inputs, 'glamour');
+
+            $result = la_modalOpened($data[0]['title'], $form);
+        } else {
+            $result = TRUE;
         }
     } else {
-        $result = false;
+        $result = FALSE;
     }
     return ($result);
 }
@@ -1956,15 +1973,19 @@ function zbs_AnnouncementsAvailable() {
  * 
  * @return void
  */
-function zbs_AnnouncementsNotice() {
+function zbs_AnnouncementsNotice($login) {
     $result = '';
     $skinPath = zbs_GetCurrentSkinPath();
     $iconsPath = $skinPath . 'iconz/';
-    if (zbs_AnnouncementsAvailable()) {
+    $availableAnnouncements=zbs_AnnouncementsAvailable($login);
+    if ($availableAnnouncements) {
+        if ($availableAnnouncements !== TRUE) {
+            $result.= $availableAnnouncements;
+        }
         $cells = la_TableCell(la_Link('?module=announcements', la_img($iconsPath . 'alert.gif'), true, 'announcementslink'));
         $cells .= la_TableCell(la_Link('?module=announcements', __('Some announcements are available'), true, 'announcementslink'));
         $rows = la_TableRow($cells);
-        $result .= la_TableBody($rows, '100%', 0, 'announcementstable');
+        $result.= la_TableBody($rows, '100%', 0, 'announcementstable');
         show_window('', $result);
     }
 }
@@ -1991,6 +2012,29 @@ function zbs_getFreezeDaysChargeData($login) {
     $FrozenAll = simple_queryall($FrozenAllQuery);
 
     return $FrozenAll;
+}
+
+/**
+ * Performs RemoteAPI request to preconfigured billing instance
+ * 
+ * @param string $requestUrl
+ * 
+ * @return string
+ */
+function zbs_remoteApiRequest($requestUrl) {
+    $usConfig = zbs_LoadConfig();
+    $result = '';
+    if (isset($usConfig['API_URL']) AND isset($usConfig['API_KEY'])) {
+        if (!empty($usConfig['API_URL']) AND ! empty($usConfig['API_KEY'])) {
+            $apiBase = $usConfig['API_URL'] . '/?module=remoteapi&key=' . $usConfig['API_KEY'];
+            @$result .= file_get_contents($apiBase . $requestUrl);
+        } else {
+            die('ERROR: API_KEY/API_URL is empty!');
+        }
+    } else {
+        die('ERROR: API_KEY/API_URL not set!');
+    }
+    return($result);
 }
 
 ?>

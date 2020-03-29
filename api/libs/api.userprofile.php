@@ -298,6 +298,33 @@ class UserProfile {
     }
 
     /**
+     * Returns backlink to surveilance user primary profile
+     * 
+     * @return string
+     */
+    protected function getVisorBacklinks() {
+        $result = '';
+        if (@$this->alterCfg['VISOR_ENABLED']) {
+            if (@$this->alterCfg['VISOR_IN_PROFILE']) {
+                $visorUsers = new NyanORM('visor_users');
+                $visorUsers->selectable(array('id', 'realname'));
+                $visorUsers->where('primarylogin', '=', $this->login);
+                $visorUserData = $visorUsers->getAll();
+                if (!empty($visorUserData)) {
+                    $visorUserId = $visorUserData[0]['id'];
+                    $visorUserName = $visorUserData[0]['realname'];
+                    $visorIcon = wf_img_sized('skins/icon_camera_small.png', '', '12', '12');
+                    $visorLinkControl = wf_Link(UbillingVisor::URL_ME . UbillingVisor::URL_USERVIEW . $visorUserId, $visorIcon . ' ' . $visorUserName);
+                    $result = $this->addRow(__('Video surveillance'), $visorLinkControl);
+                } else {
+                    $result = $this->addRow(__('Video surveillance'), __('No'));
+                }
+            }
+        }
+        return($result);
+    }
+
+    /**
      * returns catv backlinks if enabled 
      * 
      * @return string
@@ -534,7 +561,7 @@ class UserProfile {
 
         $result .= $this->getControl('?module=lifestory&username=' . $this->login, 'skins/icon_orb_big.png', 'User lifestory', 'Details', 'LIFESTORY');
         $result .= $this->getControl('?module=traffstats&username=' . $this->login, 'skins/icon_stats_big.png', 'Traffic stats', 'Traffic stats', 'TRAFFSTATS');
-        $result .= $this->getControl('?module=addcash&username=' . $this->login . '#profileending', 'skins/icon_cash_big.png', 'Finance operations', 'Cash', 'CASH');
+        $result .= $this->getControl('?module=addcash&username=' . $this->login . '#cashfield', 'skins/icon_cash_big.png', 'Finance operations', 'Cash', 'CASH');
         $result .= $this->getControl('?module=macedit&username=' . $this->login, 'skins/icon_ether_big.png', 'Change MAC', 'Change MAC', 'MAC');
         $result .= $this->getControl('?module=binder&username=' . $this->login, 'skins/icon_build_big.png', 'Address', 'Address', 'BINDER');
         $result .= $this->getControl('?module=tariffedit&username=' . $this->login, 'skins/icon_money_time.png', 'Tariff', 'Tariff', 'TARIFFEDIT');
@@ -637,9 +664,10 @@ class UserProfile {
                 }
 //and neighbors state cache
                 if (!empty($this->aptdata['buildid'])) {
-                    if (file_exists('exports/' . $this->aptdata['buildid'] . '.inbuildusers')) {
-                        $inbuildNeigbors_raw = file_get_contents('exports/' . $this->aptdata['buildid'] . '.inbuildusers');
-                        $inbuildNeigbors_raw = unserialize($inbuildNeigbors_raw);
+                    $cache = new UbillingCache();
+                    $inbuildNeigbors_raw = $cache->get('INBUILDUSERS', 3600);
+                    if (isset($inbuildNeigbors_raw[$this->aptdata['buildid']])) {
+                        $inbuildNeigbors_raw = $inbuildNeigbors_raw[$this->aptdata['buildid']];
                         if (!empty($inbuildNeigbors_raw)) {
                             $inbuildNeigborsStat = '';
                             $inbuildNeigborsStat .= wf_TableBody($inbuildNeigbors_raw['rows'], '100%', '0', 'sortable');
@@ -1118,7 +1146,12 @@ class UserProfile {
     protected function getAgentsControls() {
         $result = '';
         if ($this->alterCfg['AGENTS_ASSIGN'] == 2) {
-            $assignedAgentData = zb_AgentAssignedGetDataFast($this->login, $this->useraddress);
+            if (@$this->alterCfg['CITY_DISPLAY']) {
+                $userAddress = $this->useraddress;
+            } else {
+                $userAddress = @$this->AllUserData[$this->login]['cityname'] . ' ' . $this->useraddress;
+            }
+            $assignedAgentData = zb_AgentAssignedGetDataFast($this->login, $userAddress);
             $result = $this->addRow(__('Contrahent name'), @$assignedAgentData['contrname']);
         }
         return ($result);
@@ -1339,8 +1372,10 @@ class UserProfile {
         $result = '';
         if (isset($this->alterCfg['MOBILES_EXT'])) {
             if ($this->alterCfg['MOBILES_EXT']) {
-                $extMob = new MobilesExt();
-                $allExtRaw = $extMob->getUserMobiles($this->login);
+                //$extMob = new MobilesExt();
+                //$allExtRaw = $extMob->getUserMobiles($this->login);
+                //commented due performance issues. Using raw query below
+                $allExtRaw = simple_queryall("SELECT `id`,`mobile` from `mobileext` WHERE `login`='" . $this->login . "'");
                 $allExt = array();
                 if (!empty($allExtRaw)) {
                     foreach ($allExtRaw as $io => $each) {
@@ -1545,7 +1580,7 @@ class UserProfile {
                             }
 
                             if ($currentModule == 'addcash') {
-                                $redirectUrl = '?module=addcash&username=' . $this->login . '#profileending';
+                                $redirectUrl = '?module=addcash&username=' . $this->login . '#cashfield';
                             }
 
                             if (!empty($redirectUrl)) {
@@ -1692,8 +1727,10 @@ class UserProfile {
         $profile .= $this->addRow(__('Tariff') . $this->getTariffInfoControls($this->userdata['Tariff']), $this->userdata['Tariff'] . $this->getTariffInfoContrainer(), true);
 //Tariff change row
         $profile .= $this->addRow(__('Planned tariff change') . $this->getTariffInfoControls($this->userdata['TariffChange'], true), $this->userdata['TariffChange'] . $this->getTariffInfoContrainer(true));
-//old CaTv backlink if needed
+//CaTv backlink if needed
         $profile .= $this->getCatvBacklinks();
+//Visor user backlink if user is primary
+        $profile .= $this->getVisorBacklinks();
 //Speed override row
         $profile .= $this->addRow(__('Speed override'), $this->speedoverride);
 // signup pricing row

@@ -379,7 +379,7 @@ $lang['def']['Delete'] = 'Удалить';
 $lang['def']['Only one base tariff allowed'] = 'Доступен только один базовый тариф';
 $lang['def']['Available only in addition to base tariff'] = 'Доступен только в дополнение к базовому тарифу';
 $lang['def']['You subscribed'] = 'Вы подписаны'; 
-$lang['def']['On unsubscription will be charged fee the equivalent value of the subscription.'] = 'При отписке со счета сразу будет взыскана сумма эквивалентная стоимости этой подписки.';
+$lang['def']['On unsubscription will be charged fee the equivalent value of the subscription.'] = 'При отписке со счета сразу будет взыскана сумма эквивалентная стоимости этой подписки. Если вы желаете отписаться без списания средств обратитесь в техподдержку.';
 $lang['def']['Balance before'] = 'Баланс до';
 $lang['def']['Base'] = 'Базовый';
 
@@ -405,7 +405,10 @@ $lang['def']['Money for cameras will be charged from your primary account'] = '�
 $lang['def']['if no funds for further cameras functioning'] = 'в случае, если средств будет недостаточно для дальнейшей работы камер';
 $lang['def']['Your primary account balance now is'] = 'Текущий баланс вашей основной учетной записи';
 $lang['def']['You can recharge it with following Payment ID'] = 'Вы можете пополнить его при помощи этого платежного ID';
-
-
+$lang['def']['Back'] = 'Назад';
+$lang['def']['Settings'] = 'Настройки';
+$lang['def']['Go to'] = 'Перейти';
+$lang['def']['Host'] = 'Хост';
+$lang['def']['Port'] = 'Порт';
 
 ?>

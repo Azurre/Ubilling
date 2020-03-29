@@ -56,18 +56,6 @@ if ($statsconfig['auth'] == 'login' OR $statsconfig['auth'] == 'both') { //if en
     }
 }
 
-//mark announcements as read/unread
-if (isset($_GET['anmarkasread'])) {
-    $anReadId = vf($_GET['anmarkasread']);
-    setcookie("zbsanread_" . $anReadId, $anReadId, time() + 31104000);
-    rcms_redirect('?module=announcements');
-}
-if (isset($_GET['anmarkasunread'])) {
-    $anUnreadId = vf($_GET['anmarkasunread']);
-    setcookie("zbsanread_" . $anUnreadId, '', time() - 3600);
-    rcms_redirect('?module=announcements');
-}
-
 /**
  * Returns userstats config as array
  * 
@@ -142,7 +130,12 @@ function zbs_GetCurrentSkinPath($usConfig = array()) {
  */
 function zbs_ShowTemplate() {
     global $ContentContainer;
-    include (zbs_GetCurrentSkinPath() . 'template.html');
+    $skinPath = zbs_GetCurrentSkinPath();
+    if (file_exists($skinPath)) {
+        include ($skinPath . 'template.html');
+    } else {
+        print('Skin path not exists: ' . $skinPath);
+    }
 }
 
 /**
@@ -255,7 +248,7 @@ function zbs_rand_string($size = 4) {
     $characters = '0123456789abcdefghijklmnopqrstuvwxyz';
     $string = "";
     for ($p = 0; $p < $size; $p++) {
-        $string.= $characters[mt_rand(0, (strlen($characters) - 1))];
+        $string .= $characters[mt_rand(0, (strlen($characters) - 1))];
     }
 
     return ($string);

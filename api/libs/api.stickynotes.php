@@ -258,7 +258,7 @@ class StickyNotes {
                 $timestamp = strtotime($each['createdate']);
                 $date = date("Y, n-1, j", $timestamp);
                 $remindTime = '';
-                
+
                 if ($each['active'] == 1) {
                     $coloring = "className : 'undone',";
                 } else {
@@ -416,7 +416,9 @@ class StickyNotes {
         if (!empty($text)) {
             if ($offsetLeft) {
                 $offsetLeft = 35 + $offsetLeft . 'px';
-                $offsetTop = 25 + round($offsetLeft / 5) . 'px';
+                $dividedLeftOffset=vf($offsetLeft,3)/5;
+                $roundedLeftOffset = round($dividedLeftOffset);
+                $offsetTop = 25 + $roundedLeftOffset . 'px';
             } else {
                 $offsetLeft = '35px';
                 $offsetTop = '30px';
@@ -810,12 +812,20 @@ class StickyNotes {
         $noteData = $this->getNoteData($noteId);
 
         if (!empty($noteData)) {
+            $messages = new UbillingMessageHelper();
             if ($noteData['owner'] == $this->myLogin) {
                 $result = strip_tags($noteData['text']);
                 $result = nl2br($result);
                 $result .= wf_delimiter(2);
                 $result .= wf_BackLink(self::URL_ME);
                 $result .= wf_modalAuto(web_edit_icon() . ' ' . __('Edit'), __('Edit'), $this->editForm($noteId), 'ubButton') . ' ';
+
+                $deletingPreview = nl2br($this->cutString(strip_tags($noteData['text']), 50));
+                $deletingPreview .= wf_delimiter();
+                $deletingPreview .= wf_JSAlert(self::URL_ME . '&delete=' . $noteData['id'], web_delete_icon() . ' ' . __('Delete'), $messages->getDeleteAlert(), '', 'ubButton') . ' ';
+                $deletingPreview .= wf_Link(self::URL_ME . '&shownote=' . $noteData['id'], wf_img('skins/back.png') . ' ' . __('Cancel'), false, 'ubButton');
+                $deletingDialog = wf_modalAuto(web_delete_icon() . ' ' . __('Delete'), __('Delete'), $deletingPreview, 'ubButton');
+                $result .= $deletingDialog;
             } else {
                 $result = __('Access denied');
             }

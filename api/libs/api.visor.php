@@ -17,6 +17,13 @@ class UbillingVisor {
     protected $allUserData = array();
 
     /**
+     * Contains all available tariffs fees as tariff=>fee
+     *
+     * @var array
+     */
+    protected $allTariffPrices = array();
+
+    /**
      * Contains all visor users data as id=>data
      *
      * @var array
@@ -45,11 +52,25 @@ class UbillingVisor {
     protected $allPaymentIDs = array();
 
     /**
+     * Contains available DVR handler types
+     *
+     * @var array
+     */
+    protected $dvrTypes = array();
+
+    /**
      * Visor charge mode from VISOR_CHARGE_MODE config option.
      *
      * @var int
      */
     protected $chargeMode = 1;
+
+    /**
+     * Trassir Server integration flag
+     *
+     * @var bool
+     */
+    protected $trassirEnabled = false;
 
     /**
      * System messages helper object placeholder
@@ -59,14 +80,81 @@ class UbillingVisor {
     protected $messages = '';
 
     /**
+     * Contains preloaded channels to visor user bindings as visorId=>data
+     *
+     * @var array
+     */
+    protected $allChannels = array();
+
+    /**
+     * Contains channel to users bindings as channelGuid=>visorId
+     *
+     * @var array
+     */
+    protected $channelUsers = array();
+
+    /**
+     * Contains available secrets bindings with auth data as visorId=>secretsData
+     *
+     * @var array
+     */
+    protected $allSecrets = array();
+
+    /**
+     * Channels binginds database model
+     *
+     * @var object
+     */
+    protected $chans = '';
+
+    /**
+     * NVR secrets data model placeholder
+     *
+     * @var object
+     */
+    protected $secrets = '';
+
+    /**
+     * Available channel record modes
+     *
+     * @var array
+     */
+    protected $recordModes = array();
+
+    /**
+     * Default channel preview size
+     *
+     * @var string
+     */
+    protected $chanPreviewSize = '30%';
+
+    /**
+     * Quality percent for channels small preview
+     *
+     * @var int
+     */
+    protected $chanPreviewQuality = 1;
+
+    /**
+     * Channels preview 
+     *
+     * @var int
+     */
+    protected $chanPreviewFramerate = 1000; // 1 fps
+
+    /**
      * Basic module URLs
      */
+
     const URL_ME = '?module=visor';
     const URL_USERS = '&users=true';
     const URL_CAMS = '&cams=true';
     const URL_USERCAMS = '&ajaxusercams=';
     const URL_ALLCAMS = '&ajaxallcams=true';
     const URL_DVRS = '&dvrs=true';
+    const URL_CHANS = '&channels=true';
+    const URL_HEALTH = '&health=true';
+    const URL_CHANEDIT = '&editchannel=';
     const URL_AJUSERS = '&ajaxusers=true';
     const URL_DELUSER = '&deleteuserid=';
     const URL_DELDVR = '&deletedvrid=';
@@ -75,24 +163,38 @@ class UbillingVisor {
     const URL_CAMVIEW = '&showcamera=';
 
     /**
-     * Some default tables names
+     * Some default database tables names
      */
     const TABLE_USERS = 'visor_users';
     const TABLE_CAMS = 'visor_cams';
     const TABLE_DVRS = 'visor_dvrs';
+    const TABLE_CHANS = 'visor_chans';
+    const TABLE_SECRETS = 'visor_secrets';
+
+    /**
+     * Other stuff
+     */
+    const PATH_MODELS = 'content/documents/visormodels/';
 
     public function __construct() {
         $this->loadConfigs();
+        $this->loadDvrTypes();
         $this->initMessages();
+        $this->initChans();
+        $this->initSecrets();
         $this->loadUserData();
         $this->loadUsers();
+        $this->loadTariffPricing();
         $this->loadPaymentIds();
         $this->loadCams();
         $this->loadDvrs();
+        $this->loadRecordModes();
+        $this->loadChans();
+        $this->loadSecrets();
     }
 
     /**
-     * Loads reqired configss
+     * Loads reqired configs
      * 
      * @global object $ubillingConfig
      * 
@@ -104,6 +206,38 @@ class UbillingVisor {
         if (@$this->altCfg['VISOR_CHARGE_MODE']) {
             $this->chargeMode = $this->altCfg['VISOR_CHARGE_MODE'];
         }
+
+        if (@$this->altCfg['TRASSIRMGR_ENABLED']) {
+            $this->trassirEnabled = true;
+        }
+    }
+
+    /**
+     * Sets available DVR types
+     * 
+     * @return void
+     */
+    protected function loadDvrTypes() {
+        $this->dvrTypes = array(
+            'generic' => __('No')
+        );
+
+        if ($this->trassirEnabled) {
+            $this->dvrTypes += array('trassir' => __('Trassir Server'));
+        }
+    }
+
+    /**
+     * Sets default available channel record modes
+     * 
+     * @return void
+     */
+    protected function loadRecordModes() {
+        $this->recordModes = array(
+            1 => __('Permanent record'),
+            2 => __('Manual record'),
+            3 => __('On detector')
+        );
     }
 
     /**
@@ -122,6 +256,57 @@ class UbillingVisor {
      */
     protected function loadUserData() {
         $this->allUserData = zb_UserGetAllDataCache();
+    }
+
+    /**
+     * Loads tariffs pricing data from database into protected prop
+     * 
+     * @return void
+     */
+    protected function loadTariffPricing() {
+        $this->allTariffPrices = zb_TariffGetPricesAll();
+    }
+
+    /**
+     * Inits channels bindings database model
+     * 
+     * @return void
+     */
+    protected function initChans() {
+        $this->chans = new NyanORM(self::TABLE_CHANS);
+    }
+
+    /**
+     * Inits secrets database model
+     * 
+     * @return void
+     */
+    protected function initSecrets() {
+        $this->secrets = new NyanORM(self::TABLE_SECRETS);
+    }
+
+    /**
+     * Loads available channels bindings from database
+     * 
+     * @return void
+     */
+    protected function loadChans() {
+        $chansTmp = $this->chans->getAll();
+        if (!empty($chansTmp)) {
+            foreach ($chansTmp as $io => $each) {
+                $this->allChannels[$each['visorid']][] = $each;
+                $this->channelUsers[$each['chan']] = $each['visorid'];
+            }
+        }
+    }
+
+    /**
+     * Loads available secrets bindings from database
+     * 
+     * @return void
+     */
+    protected function loadSecrets() {
+        $this->allSecrets = $this->secrets->getAll('visorid');
     }
 
     /**
@@ -206,6 +391,10 @@ class UbillingVisor {
         $result .= wf_Link(self::URL_ME . self::URL_CAMS, wf_img('skins/photostorage.png') . ' ' . __('Cams'), false, 'ubButton') . ' ';
         if (cfr('VISOREDIT')) {
             $result .= wf_Link(self::URL_ME . self::URL_DVRS, wf_img('skins/icon_restoredb.png') . ' ' . __('DVRs'), false, 'ubButton') . ' ';
+            if ($this->trassirEnabled) {
+                $result .= wf_Link(self::URL_ME . self::URL_CHANS, wf_img('skins/play.png') . ' ' . __('Channels'), false, 'ubButton') . ' ';
+                $result .= wf_Link(self::URL_ME . self::URL_HEALTH, wf_img('skins/log_icon_small.png') . ' ' . __('DVR health'), false, 'ubButton') . ' ';
+            }
         }
         return ($result);
     }
@@ -252,7 +441,6 @@ class UbillingVisor {
                 $data[] = $chargeFlag;
                 $data[] = $this->getUserCamerasCount($each['id']);
                 $actLinks = '';
-                //$actLinks .= wf_JSAlert(self::URL_ME . self::URL_DELUSER . $each['id'], web_delete_icon(), $this->messages->getDeleteAlert()) . ' ';
                 $actLinks .= wf_Link(self::URL_ME . self::URL_USERVIEW . $each['id'], web_edit_icon());
                 $data[] = $actLinks;
                 $json->addRow($data);
@@ -283,9 +471,10 @@ class UbillingVisor {
     /**
      * Creates new user in database
      * 
-     * @return void
+     * @return int
      */
     public function createUser() {
+        $result = '';
         if (wf_CheckPost(array('newusercreate', 'newusername'))) {
             $newRealName = $_POST['newusername'];
             $newRealNameF = mysql_real_escape_string($newRealName);
@@ -297,7 +486,9 @@ class UbillingVisor {
             nr_query($query);
             $newId = simple_get_lastid(self::TABLE_USERS);
             log_register('VISOR USER CREATE [' . $newId . '] NAME `' . $newRealName . '`');
+            $result = $newId;
         }
+        return($result);
     }
 
     /**
@@ -430,9 +621,13 @@ class UbillingVisor {
         if (isset($this->allUsers[$userId])) {
             $camerasCount = $this->getUserCamerasCount($userId);
             if ($camerasCount == 0) {
-                $query = "DELETE from `" . self::TABLE_USERS . "` WHERE `id`='" . $userId . "';";
-                nr_query($query);
-                log_register('VISOR USER DELETE [' . $userId . ']');
+                if (!isset($this->allChannels[$userId])) {
+                    $query = "DELETE from `" . self::TABLE_USERS . "` WHERE `id`='" . $userId . "';";
+                    nr_query($query);
+                    log_register('VISOR USER DELETE [' . $userId . ']');
+                } else {
+                    $result .= __('Channel have user assigned');
+                }
             } else {
                 $result .= __('User have some cameras associated');
             }
@@ -483,6 +678,66 @@ class UbillingVisor {
     }
 
     /**
+     * 
+     * @param int $userId
+     * 
+     * @return array
+     */
+    protected function createUserSecret($userId) {
+        $result = array();
+        $userId = ubRouting::filters($userId, 'int');
+        if (isset($this->allUsers[$userId])) {
+            if (!isset($this->allSecrets[$userId])) {
+                $loginProposal = 'view' . $userId;
+                $passwordProposal = zb_rand_digits(8);
+
+                $this->secrets->data('visorid', $userId);
+                $this->secrets->data('login', $loginProposal);
+                $this->secrets->data('password', $passwordProposal);
+                $this->secrets->create();
+
+                log_register('VISOR USER [' . $userId . '] CREATE SECRET');
+            } else {
+                $result = $this->allSecrets[$userId];
+            }
+        }
+        return($result);
+    }
+
+    /**
+     * Renders visor user global NVR secrets data
+     * 
+     * @param int $userId
+     * 
+     * @return string
+     */
+    protected function renderUserSecrets($userId) {
+        $result = '';
+        $userId = ubRouting::filters($userId, 'int');
+        if (isset($this->allUsers[$userId])) {
+            if (isset($this->allSecrets[$userId])) {
+                $secretData = $this->allSecrets[$userId];
+            } else {
+                $this->createUserSecret($userId);
+                //update current instance data
+                $this->loadSecrets();
+                $secretData = $this->allSecrets[$userId];
+            }
+
+            $rows = '';
+            $cells = wf_TableCell(__('DVR login'), '', 'row2');
+            $cells .= wf_TableCell($secretData['login']);
+            $rows .= wf_TableRow($cells, 'row3');
+
+            $cells = wf_TableCell(__('DVR password'), '', 'row2');
+            $cells .= wf_TableCell($secretData['password']);
+            $rows .= wf_TableRow($cells, 'row3');
+            $result .= $rows;
+        }
+        return($result);
+    }
+
+    /**
      * Renders visor users profile with associated cameras and some controls
      * 
      * @param int $userId
@@ -491,7 +746,7 @@ class UbillingVisor {
      */
     public function renderUserProfile($userId) {
         $result = '';
-        $userId = vf($userId, 3);
+        $userId = ubRouting::filters($userId, 'int');
         if (isset($this->allUsers[$userId])) {
             $userData = $this->allUsers[$userId];
             if (!empty($userData)) {
@@ -507,9 +762,17 @@ class UbillingVisor {
                 $chargeFlag = ($userData['chargecams']) ? wf_img_sized('skins/icon_active.gif', '', '12', '12') . ' ' . __('Yes') : wf_img_sized('skins/icon_inactive.gif', '', '12', '12') . ' ' . __('No');
                 $cells .= wf_TableCell($chargeFlag);
                 $rows .= wf_TableRow($cells, 'row3');
+                //global NVR secrets
+                $rows .= $this->renderUserSecrets($userId);
 
                 //primary user account inline
                 $rows .= $this->renderUserPrimaryAccount($userId);
+                //additional cameras fee
+                if ($userCamsCount > 0) {
+                    $cells = wf_TableCell(__('Total surveillance price'), '', 'row2');
+                    $cells .= wf_TableCell($this->getUserCamerasPricing($userId));
+                    $rows .= wf_TableRow($cells, 'row3');
+                }
 
                 $result .= wf_TableBody($rows, '100%', 0, '');
 
@@ -520,11 +783,138 @@ class UbillingVisor {
                 } else {
                     $result .= $this->messages->getStyledMessage(__('User have no cameras assigned'), 'warning');
                 }
+
+                //assigned channels preview & assign forms
+                $result .= $this->renderUserAssignedChannels($userId);
             }
         } else {
             $result .= $this->messages->getStyledMessage(__('Something went wrong') . ': ' . __('User not exists') . ' [' . $userId . ']', 'error');
         }
         return ($result);
+    }
+
+    /**
+     * Renders channels available on all of DVRs that can be assigned to this user
+     * 
+     * @param int $userId
+     * 
+     * @return string
+     */
+    protected function renderUnassignedChannels($userId) {
+        $result = '';
+        $userId = ubRouting::filters($userId, 'int');
+        $unassignedCount = 0;
+        $chanControlLinks = '';
+        if ($this->trassirEnabled) {
+            if (!empty($this->allDvrs)) {
+                foreach ($this->allDvrs as $io => $eachDvr) {
+                    if ($eachDvr['type'] == 'trassir') {
+                        $dvrGate = new TrassirServer($eachDvr['ip'], $eachDvr['login'], $eachDvr['password'], $eachDvr['apikey'], $eachDvr['port']);
+                        $dvrChannels = $dvrGate->getChannels();
+                        if (!empty($dvrChannels)) {
+                            foreach ($dvrChannels as $eachChanGuid => $eachChanName) {
+                                //not assigned to anyone
+                                if (!isset($this->channelUsers[$eachChanGuid])) {
+                                    $chanEditLink = self::URL_ME . self::URL_CHANEDIT . $eachChanGuid . '&dvrid=' . $eachDvr['id'] . '&useridpreset=' . $userId;
+                                    $chanControlLinks .= wf_Link($chanEditLink, web_edit_icon() . ' ' . $eachChanGuid . ' (' . $eachChanName . ')', false, 'ubButton') . ' ';
+                                    $unassignedCount++;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if ($unassignedCount > 0) {
+            $result .= wf_tag('h2') . __('No user assigned') . wf_tag('h2', true);
+            $result .= $chanControlLinks;
+        }
+        return($result);
+    }
+
+    /**
+     * Renders list of user assigned channels with their preview and optional assign form
+     * 
+     * @param int $userId
+     * 
+     * @return string
+     */
+    protected function renderUserAssignedChannels($userId) {
+        $result = '';
+        $userId = ubRouting::filters($userId, 'int');
+        if ($this->trassirEnabled) {
+            if (ubRouting::checkGet('chanspreview')) {
+                $result .= wf_tag('h2', false) . __('Channels') . wf_tag('h2', true);
+                $result .= wf_tag('div', false);
+
+                //assigned channels list
+                if (isset($this->allChannels[$userId])) {
+                    if (!empty($this->allChannels[$userId])) {
+                        foreach ($this->allChannels[$userId] as $io => $eachChan) {
+                            $chanDvrData = $this->allDvrs[$eachChan['dvrid']];
+                            if ($chanDvrData['type'] == 'trassir') {
+                                $dvrGate = new TrassirServer($chanDvrData['ip'], $chanDvrData['login'], $chanDvrData['password'], $chanDvrData['apikey'], $chanDvrData['port']);
+
+                                $streamUrl = $dvrGate->getLiveVideoStream($eachChan['chan'], 'main', 'mjpeg', $this->chanPreviewQuality, $this->chanPreviewFramerate);
+                                $result .= wf_tag('div', false, 'whiteboard', 'style="width:' . $this->chanPreviewSize . ';"');
+                                $chanEditLabel = web_edit_icon() . ' ' . __('Edit') . ' ' . __('channel');
+                                $channelEditControl = wf_Link(self::URL_ME . self::URL_CHANEDIT . $eachChan['chan'] . '&dvrid=' . $eachChan['dvrid'], $chanEditLabel);
+                                $result .= $eachChan['chan'];
+                                $result .= wf_tag('br');
+                                $result .= wf_img_sized($streamUrl, '', '90%');
+
+                                $result .= wf_tag('div', false, 'todaysig');
+                                $result .= $channelEditControl;
+                                $result .= wf_tag('div', true);
+
+                                $result .= wf_CleanDiv();
+                                $result .= wf_tag('div', true);
+                            }
+                        }
+                    }
+                } else {
+                    $result .= $this->messages->getStyledMessage(__('User have no channels assigned'), 'warning');
+                }
+
+                $result .= wf_CleanDiv();
+                $result .= wf_tag('div', true, '');
+
+                //unassigned channels list
+                $result .= $this->renderUnassignedChannels($userId);
+
+                $result .= wf_delimiter();
+                $result .= wf_BackLink(self::URL_ME . self::URL_USERVIEW . $userId);
+            } else {
+                $result .= wf_delimiter();
+                $result .= wf_Link(self::URL_ME . self::URL_USERVIEW . $userId . '&chanspreview=true', web_green_led() . ' ' . __('Channels'), false, 'ubButton');
+            }
+        }
+        return($result);
+    }
+
+    /**
+     * Returns user assigned cameras fee
+     * 
+     * @param int $userId
+     * 
+     * @return float
+     */
+    protected function getUserCamerasPricing($userId) {
+        $result = 0;
+        $allCameras = $this->getUserCameras($userId);
+        if (!empty($allCameras)) {
+            foreach ($allCameras as $io => $each) {
+                $cameraLogin = $each['login'];
+                if (isset($this->allUserData[$cameraLogin])) {
+                    $cameraTariff = $this->allUserData[$cameraLogin]['Tariff'];
+                    if (isset($this->allTariffPrices[$cameraTariff])) {
+                        $result += $this->allTariffPrices[$cameraTariff];
+                    }
+                }
+            }
+        }
+        return($result);
     }
 
     /**
@@ -724,7 +1114,7 @@ class UbillingVisor {
                     }
                     $data[] = $cameraCash;
                     $data[] = $cameraCredit;
-                    $actLinks = wf_Link(self::URL_ME . self::URL_CAMVIEW . $each['id'], web_edit_icon());
+                    $actLinks = wf_Link(self::URL_ME . self::URL_CAMVIEW . $each['id'], web_edit_icon() . ' ' . __('Edit') . ' ' . __('camera'));
                     $data[] = $actLinks;
                     $json->addRow($data);
                     unset($data);
@@ -788,7 +1178,7 @@ class UbillingVisor {
                 }
                 $data[] = $cameraCash;
                 $data[] = $cameraCredit;
-                $actLinks = wf_Link(self::URL_ME . self::URL_CAMVIEW . $each['id'], web_edit_icon());
+                $actLinks = wf_Link(self::URL_ME . self::URL_CAMVIEW . $each['id'], web_edit_icon() . ' ' . __('Edit') . ' ' . __('camera'));
                 $data[] = $actLinks;
                 $json->addRow($data);
                 unset($data);
@@ -856,6 +1246,46 @@ class UbillingVisor {
                 log_register('VISOR CAMERA CREATE FAIL VISORID_NOT_EXISTS');
             }
         }
+    }
+
+    /**
+     * Creates channel to user binding in database
+     * 
+     * @param int $visorId
+     * @param int $dvrId
+     * @param string $channelGuid
+     * 
+     * @return void
+     */
+    public function assignChannel($visorId, $dvrId, $channelGuid) {
+        $visorId = ubRouting::filters($visorId, 'int');
+        $dvrId = ubRouting::filters($dvrId, 'int');
+        $channelGuid = ubRouting::filters($channelGuid, 'mres');
+        $this->chans->data('visorid', $visorId);
+        $this->chans->data('dvrid', $dvrId);
+        $this->chans->data('chan', $channelGuid);
+        $this->chans->create();
+        log_register('VISOR USER [' . $visorId . '] ASSIGN CHAN `' . $channelGuid . '` ON DVR [' . $dvrId . ']');
+    }
+
+    /**
+     * Deletes channel to user binding in database
+     * 
+     * @param int $visorId
+     * @param int $dvrId
+     * @param string $channelGuid
+     * 
+     * @return void
+     */
+    public function unassignChannel($visorId, $dvrId, $channelGuid) {
+        $visorId = ubRouting::filters($visorId, 'int');
+        $dvrId = ubRouting::filters($dvrId, 'int');
+        $channelGuid = ubRouting::filters($channelGuid, 'mres');
+        $this->chans->where('visorid', '=', $visorId);
+        $this->chans->where('dvrid', '=', $dvrId);
+        $this->chans->where('chan', '=', $channelGuid);
+        $this->chans->delete();
+        log_register('VISOR USER [' . $visorId . '] UNASSIGN CHAN `' . $channelGuid . '` ON DVR [' . $dvrId . ']');
     }
 
     /**
@@ -985,7 +1415,25 @@ class UbillingVisor {
 
             if (!empty($this->allDvrs)) {
                 foreach ($this->allDvrs as $io => $each) {
-                    $dvrTmp[$each['id']] = $each['ip'];
+                    $dvrFull = false;
+                    $dvrLabel = $each['ip'];
+                    if ($each['camlimit'] > 0) {
+                        $dvrCamsNow = $this->getDvrCameraCount($each['id']);
+                        if ($dvrCamsNow >= $each['camlimit']) {
+                            $dvrFull = true;
+                        }
+                    }
+
+                    if (!empty($each['name'])) {
+                        $dvrLabel .= ' - ' . $each['name'];
+                    }
+
+
+                    $dvrLabel .= ' (' . $dvrCamsNow . '/' . $each['camlimit'] . ')';
+                    if ($dvrFull) {
+                        $dvrLabel .= ' ' . __('full') . '!';
+                    }
+                    $dvrTmp[$each['id']] = $dvrLabel;
                 }
             }
 
@@ -1039,8 +1487,13 @@ class UbillingVisor {
                 $cells .= wf_TableCell($cameraData['port']);
                 $rows .= wf_TableRow($cells, 'row3');
 
+                if (!empty($this->allDvrs[$cameraData['dvrid']]['name'])) {
+                    $curCamDvrLabel = $this->allDvrs[$cameraData['dvrid']]['ip'] . ' - ' . $this->allDvrs[$cameraData['dvrid']]['name'];
+                } else {
+                    $curCamDvrLabel = @$this->allDvrs[$cameraData['dvrid']]['ip'];
+                }
                 $cells = wf_TableCell(__('DVR'), '30%', 'row2');
-                $cells .= wf_TableCell(@$this->allDvrs[$cameraData['dvrid']]['ip']);
+                $cells .= wf_TableCell($curCamDvrLabel);
                 $rows .= wf_TableRow($cells, 'row3');
 
                 $cells = wf_TableCell(__('DVR login'), '30%', 'row2');
@@ -1073,6 +1526,9 @@ class UbillingVisor {
                 if (cfr('VISOREDIT')) {
                     $result .= wf_modalAuto(web_edit_icon() . ' ' . __('Edit'), __('Edit'), $cameraEditForm, 'ubButton');
                     $result .= wf_modalAuto(web_delete_icon() . ' ' . __('Delete'), __('Delete'), $this->renderCameraDeletionForm($cameraId), 'ubButton');
+                    if ($this->trassirEnabled) {
+                        $result .= $this->renderTrassirCameraControls($cameraId);
+                    }
                 }
             } else {
                 $result .= $this->messages->getStyledMessage(__('Something went wrong') . ': ' . __('User not exists') . ' (' . $cameraData['login'] . ')', 'error');
@@ -1080,6 +1536,209 @@ class UbillingVisor {
         } else {
             $result .= $this->messages->getStyledMessage(__('Something went wrong') . ': ' . __('No such camera exists') . ' [' . $cameraId . ']', 'error');
         }
+        return($result);
+    }
+
+    /**
+     * Returns popular and most frequently used camera models for some protocol/vendor
+     * 
+     * @param string $protocol
+     * 
+     * @return array
+     */
+    protected function getPopularCameraModels($protocol) {
+        $result = array();
+        if (file_exists(self::PATH_MODELS . $protocol)) {
+            $allModels = rcms_scandir(self::PATH_MODELS . $protocol . '/');
+            if (!empty($allModels)) {
+                foreach ($allModels as $io => $each) {
+                    $result[$each] = $each . ' *';
+                }
+            }
+        }
+        return($result);
+    }
+
+    /**
+     * Returns camera "model mismatch" warning editing form. Also catches change requests.
+     * 
+     * @param int $cameraId
+     * @param int $curState
+     * 
+     * @return string
+     */
+    protected function renderTrassirCameraMismatchForm($cameraId, $curState) {
+        $result = '';
+        $cameraId = ubRouting::filters($cameraId, 'int');
+        if (isset($this->allCams[$cameraId])) {
+            $cameraData = $this->allCams[$cameraId];
+            $cameraDvrId = $cameraData['dvrid'];
+            $dvrData = $this->allDvrs[$cameraDvrId];
+            $cameraUserData = $this->allUserData[$cameraData['login']];
+            $cameraIp = $cameraUserData['ip'];
+
+
+            //change model mismatch warning request catched
+            if (ubRouting::checkPost('disablemodelmismatchcameraid')) {
+                $newDisableState = (ubRouting::checkPost('modelmismatchdisabled')) ? 1 : 0; //need int as param
+                $trassirGate = new TrassirServer($dvrData['ip'], $dvrData['login'], $dvrData['password'], $dvrData['apikey'], $dvrData['port'], false);
+                $trassirGate->setModelMismatch($cameraIp, $newDisableState);
+                log_register('VISOR CAMERA [' . $cameraId . '] MMIS `' . $newDisableState . '` ON DVR [' . $cameraDvrId . '] AS `' . $cameraIp . '`');
+                ubRouting::nav(self::URL_ME . '&' . self::URL_CAMVIEW . $cameraId); //preventing form data duplication
+            }
+
+
+            if ($curState == 1 OR $curState == 0) {
+                $inputs = wf_HiddenInput('disablemodelmismatchcameraid', $cameraId);
+                $inputs .= wf_CheckInput('modelmismatchdisabled', __('Model mismatch warning disabled on this DVR'), false, $curState);
+                $inputs .= wf_Submit(__('Save'));
+                $result .= wf_tag('br');
+                $result .= wf_Form('', 'POST', $inputs, 'glamour');
+            } else {
+                //may be caused by wrong camera IP or NVR connection issues
+                $result .= $this->messages->getStyledMessage(__('Cant detect mismatch warning state for camera') . ' ' . $cameraIp, 'warning'); // Awesome Oo
+            }
+        } else {
+            $result .= $this->messages->getStyledMessage(__('Something went wrong') . ': ' . __('Camera') . ' ' . __('Not exists') . ' [' . $cameraId . ']', 'error');
+        }
+        return($result);
+    }
+
+    /**
+     * Rders camera DVR registering form if its not registered yet
+     * 
+     * @param int $cameraId
+     * 
+     * @return string
+     */
+    protected function renderTrassirCameraCreateForm($cameraId) {
+        $result = '';
+        $cameraId = ubRouting::filters($cameraId, 'int');
+        if (isset($this->allCams[$cameraId])) {
+            $cameraData = $this->allCams[$cameraId];
+            $cameraDvrId = $cameraData['dvrid'];
+            $dvrData = $this->allDvrs[$cameraDvrId];
+            $cameraUserData = $this->allUserData[$cameraData['login']];
+            $cameraIp = $cameraUserData['ip'];
+
+            $trassir = new TrassirServer($dvrData['ip'], $dvrData['login'], $dvrData['password'], $dvrData['apikey'], $dvrData['port'], false);
+            $serverHealth = $trassir->getHealth();
+            //dummy connection check
+            if (!empty($serverHealth)) {
+                $result .= $this->messages->getStyledMessage(__('DVR') . ' ' . $dvrData['name'] . ': ' . __('Connected'), 'success');
+                $allCameraIps = $trassir->getAllCameraIps();
+                if (isset($allCameraIps[$cameraIp])) {
+                    $successLabel = __('Camera') . ': ' . __('Registered') . ' ' . __('On') . ' ' . __('DVR') . ' ' . $dvrData['name'];
+                    $result .= $this->messages->getStyledMessage($successLabel, 'success');
+                    //Model mismatch disabling interface
+                    $curMissmatchState = $trassir->getModelMismatch($cameraIp);
+                    $result .= $this->renderTrassirCameraMismatchForm($cameraId, $curMissmatchState);
+                } else {
+                    //here registering form.. MB...
+                    $result .= $this->messages->getStyledMessage(__('Camera is not registered at') . ' ' . $dvrData['name'], 'warning');
+                    $protoTmp = $trassir->getCameraProtocols();
+                    if (!empty($protoTmp)) {
+                        $supportedCameraProtocols = array('TRASSIR' => 'TRASSIR', 'Hikvision' => 'Hikvision'); //popular protocols
+                        //Protocols received from DVR
+                        foreach ($protoTmp as $io => $each) {
+                            $supportedCameraProtocols[$each] = $each;
+                        }
+
+                        //camera registering form processing
+                        if (!ubRouting::checkPost(array('newtrassircamera', 'newtrassircameraprotocol', 'newtrassircameramodel'))) {
+                            $supportedCameraModels = array();
+
+                            $newCamProtocol = (ubRouting::checkPost('newtrassircameraprotocol')) ? ubRouting::post('newtrassircameraprotocol') : '';
+
+                            $inputs = wf_HiddenInput('newtrassircamera', 'true');
+                            if (!empty($newCamProtocol)) {
+                                //getting protocol supported models
+                                $supportedCameraModelsTmp = $trassir->getCameraModels($newCamProtocol);
+                                //Protocol is supported on NVR
+                                if (!empty($supportedCameraModelsTmp)) {
+                                    $supportedCameraModels = $this->getPopularCameraModels($newCamProtocol); //frequently used models
+                                }
+
+                                $supportedCameraModels += $supportedCameraModelsTmp;
+
+                                $inputs .= $newCamProtocol . ' ';
+                                $inputs .= wf_HiddenInput('newtrassircameraprotocol', $newCamProtocol);
+                                $inputs .= wf_Selector('newtrassircameramodel', $supportedCameraModels, __('Model'), '', false) . ' ';
+                                $inputs .= wf_Submit(__('Create camera') . ' ' . __('on') . ' ' . __('DVR') . ' ' . $dvrData['name']);
+                            } else {
+                                $inputs .= wf_Selector('newtrassircameraprotocol', $supportedCameraProtocols, __('Device vendor'), '', false) . ' ';
+                                $inputs .= wf_Submit(__('Continue'));
+                            }
+                            $result .= wf_delimiter();
+                            $result .= wf_Form('', 'POST', $inputs, 'glamour');
+                        } else {
+                            //or just push that camera to DVR
+                            $trassir->createCamera(ubRouting::post('newtrassircameraprotocol'), ubRouting::post('newtrassircameramodel'), $cameraIp, $cameraData['port'], $cameraData['camlogin'], $cameraData['campassword']);
+                            log_register('VISOR CAMERA [' . $cameraId . '] CONNECTED DVR [' . $cameraDvrId . '] AS `' . $cameraIp . '`');
+                            ubRouting::nav(self::URL_ME . '&' . self::URL_CAMVIEW . $cameraId); //preventing form data duplication
+                        }
+                    }
+                }
+            } else {
+                $result .= $this->messages->getStyledMessage(__('DVR connection error') . ' [' . $dvrData['id'] . ']', 'error');
+            }
+        } else {
+            $result .= $this->messages->getStyledMessage(__('Something went wrong') . ': ' . __('Camera') . ' ' . __('Not exists') . ' [' . $cameraId . ']', 'error');
+        }
+        return($result);
+    }
+
+    /**
+     * Renders IP device controls if camera is served by trassir based DVR
+     * 
+     * @param int $cameraId
+     * 
+     * @return string
+     */
+    protected function renderTrassirCameraControls($cameraId) {
+        $result = '';
+        $cameraId = ubRouting::filters($cameraId, 'int');
+        if (isset($this->allCams[$cameraId])) {
+            $cameraData = $this->allCams[$cameraId];
+            $cameraDvrId = $cameraData['dvrid'];
+            //DVR assigned
+            if ($cameraDvrId) {
+                if (isset($this->allDvrs[$cameraDvrId])) {
+                    $dvrData = $this->allDvrs[$cameraDvrId];
+                    //Here we go! That DVR can be managable
+                    if ($dvrData['type'] == 'trassir') {
+                        if (!empty($cameraData['camlogin'])) {
+                            if (!empty($cameraData['campassword'])) {
+                                if (!empty($cameraData['port'])) {
+                                    if (isset($this->allUserData[$cameraData['login']])) {
+                                        //DVD configuration is acceptable?
+                                        if (!empty($dvrData['login']) AND ! empty($dvrData['password']) AND ! empty($dvrData['port']) AND ! empty($dvrData['apikey'])) {
+                                            //Camera looks like it may be registgered on DVR
+                                            $result .= $this->renderTrassirCameraCreateForm($cameraId);
+                                        } else {
+                                            $result .= $this->messages->getStyledMessage(__('Something went wrong') . ': ' . __('DVR') . ' ' . __('Configuration') . ' ' . __('is empty'), 'error');
+                                        }
+                                    } else {
+                                        $result .= $this->messages->getStyledMessage(__('Camera') . ' ' . __('User') . ' ' . __('Not exists') . ' (' . $cameraData['login'] . ')', 'error');
+                                    }
+                                } else {
+                                    $result .= $this->messages->getStyledMessage(__('Camera') . ' ' . __('Port') . ' ' . __('is empty'), 'error');
+                                }
+                            } else {
+                                $result .= $this->messages->getStyledMessage(__('Camera password') . ' ' . __('is empty'), 'error');
+                            }
+                        } else {
+                            $result .= $this->messages->getStyledMessage(__('Camera login') . ' ' . __('is empty'), 'error');
+                        }
+                    }
+                } else {
+                    $result .= $this->messages->getStyledMessage(__('Something went wrong') . ': ' . __('DVR') . ' ' . __('Not exists') . ' [' . $cameraDvrId . ']', 'error');
+                }
+            }
+        } else {
+            $result .= $this->messages->getStyledMessage(__('Something went wrong') . ': ' . __('Camera') . ' ' . __('Not exists') . ' [' . $cameraId . ']', 'error');
+        }
+
         return($result);
     }
 
@@ -1155,10 +1814,14 @@ class UbillingVisor {
         $sup = wf_tag('sup') . '*' . wf_tag('sup', true);
 
         $inputs = wf_HiddenInput('newdvr', 'true');
+        $inputs .= wf_TextInput('newdvrname', __('Name'), '', true, 15);
+        $inputs .= wf_Selector('newdvrtype', $this->dvrTypes, __('Type'), '', true);
         $inputs .= wf_TextInput('newdvrip', __('IP') . $sup, '', true, 15, 'ip');
         $inputs .= wf_TextInput('newdvrport', __('Port'), '', true, 5, 'digits');
         $inputs .= wf_TextInput('newdvrlogin', __('Login'), '', true, 20);
         $inputs .= wf_TextInput('newdvrpassword', __('Password'), '', true, 20);
+        $inputs .= wf_TextInput('newdvrapikey', __('API key'), '', true, 20);
+        $inputs .= wf_TextInput('newdvrcamlimit', __('Cameras limit'), '0', true, 3, 'digits');
         $inputs .= wf_Submit(__('Create'));
 
         $result .= wf_Form('', 'POST', $inputs, 'glamour');
@@ -1171,17 +1834,30 @@ class UbillingVisor {
      * @return void
      */
     public function createDVR() {
-        if (wf_CheckPost(array('newdvr', 'newdvrip'))) {
-            $ip = $_POST['newdvrip'];
-            $ip_f = mysql_real_escape_string($ip);
-            $port = vf($_POST['newdvrport'], 3);
-            $login = mysql_real_escape_string($_POST['newdvrlogin']);
-            $password = mysql_real_escape_string($_POST['newdvrpassword']);
+        if (ubRouting::checkPost(array('newdvr', 'newdvrip'))) {
+            $ip = ubRouting::post('newdvrip');
+            $ip_f = ubRouting::filters($ip, 'mres');
+            $port = ubRouting::post('newdvrport', 'int');
+            $login = ubRouting::post('newdvrlogin', 'mres');
+            $password = ubRouting::post('newdvrpassword', 'mres');
+            $name = ubRouting::post('newdvrname', 'mres');
+            $type = ubRouting::post('newdvrtype', 'mres');
+            $apikey = ubRouting::post('newdvrapikey', 'mres');
+            $camlimit = ubRouting::post('newdvrcamlimit', 'int');
 
-            $query = "INSERT INTO `" . self::TABLE_DVRS . "` (`id`,`ip`,`port`,`login`,`password`) VALUES "
-                    . "(NULL,'" . $ip_f . "','" . $port . "','" . $login . "','" . $password . "');";
-            nr_query($query);
-            $newId = simple_get_lastid(self::TABLE_DVRS);
+            $dvrs = new NyanORM(self::TABLE_DVRS);
+            $dvrs->data('ip', $ip_f);
+            $dvrs->data('port', $port);
+            $dvrs->data('login', $login);
+            $dvrs->data('password', $password);
+            $dvrs->data('apikey', $apikey);
+            $dvrs->data('name', $name);
+            $dvrs->data('type', $type);
+            $dvrs->data('camlimit', $camlimit);
+            $dvrs->create();
+
+            $newId = $dvrs->getLastId();
+
             log_register('VISOR DVR CREATE [' . $newId . '] IP `' . $ip . '`');
         }
     }
@@ -1201,10 +1877,14 @@ class UbillingVisor {
             $sup = wf_tag('sup') . '*' . wf_tag('sup', true);
 
             $inputs = wf_HiddenInput('editdvrid', $dvrId);
+            $inputs .= wf_TextInput('editdvrname', __('Name'), $dvrData['name'], true, 15);
+            $inputs .= wf_Selector('editdvrtype', $this->dvrTypes, __('Type'), $dvrData['type'], true);
             $inputs .= wf_TextInput('editdvrip', __('IP') . $sup, $dvrData['ip'], true, 15, 'ip');
             $inputs .= wf_TextInput('editdvrport', __('Port'), $dvrData['port'], true, 5, 'digits');
             $inputs .= wf_TextInput('editdvrlogin', __('Login'), $dvrData['login'], true, 12);
             $inputs .= wf_TextInput('editdvrpassword', __('Password'), $dvrData['password'], true, 12);
+            $inputs .= wf_TextInput('editdvrapikey', __('API key'), $dvrData['apikey'], true, 20);
+            $inputs .= wf_TextInput('editdvrcamlimit', __('Cameras limit'), $dvrData['camlimit'], true, 20);
             $inputs .= wf_tag('br');
             $inputs .= wf_Submit(__('Save'));
             $result .= wf_Form('', 'POST', $inputs, 'glamour');
@@ -1230,6 +1910,11 @@ class UbillingVisor {
                 $newPort = ubRouting::post('editdvrport', 'int');
                 $newLogin = ubRouting::post('editdvrlogin', 'mres');
                 $newPassword = ubRouting::post('editdvrpassword', 'mres');
+                $newName = ubRouting::post('editdvrname', 'mres');
+                $newType = ubRouting::post('editdvrtype', 'mres');
+                $newApikey = ubRouting::post('editdvrapikey', 'mres');
+                $newCamlimit = ubRouting::post('editdvrcamlimit', 'int');
+
                 if ($dvrData['ip'] != $newIp) {
                     simple_update_field(self::TABLE_DVRS, 'ip', $newIp, $where);
                     log_register('VISOR DVR [' . $dvrId . '] CHANGE IP `' . $newIp . '`');
@@ -1249,8 +1934,96 @@ class UbillingVisor {
                     simple_update_field(self::TABLE_DVRS, 'password', $newPassword, $where);
                     log_register('VISOR DVR [' . $dvrId . '] CHANGE PASSWORD `' . $newPassword . '`');
                 }
+
+                if ($dvrData['name'] != $newName) {
+                    simple_update_field(self::TABLE_DVRS, 'name', $newName, $where);
+                    log_register('VISOR DVR [' . $dvrId . '] CHANGE NAME `' . $newName . '`');
+                }
+
+                if ($dvrData['type'] != $newType) {
+                    simple_update_field(self::TABLE_DVRS, 'type', $newType, $where);
+                    log_register('VISOR DVR [' . $dvrId . '] CHANGE TYPE `' . $newType . '`');
+                }
+
+                if ($dvrData['apikey'] != $newApikey) {
+                    simple_update_field(self::TABLE_DVRS, 'apikey', $newApikey, $where);
+                    log_register('VISOR DVR [' . $dvrId . '] CHANGE APIKEY `' . $newApikey . '`');
+                }
+
+                if ($dvrData['camlimit'] != $newCamlimit) {
+                    simple_update_field(self::TABLE_DVRS, 'camlimit', $newCamlimit, $where);
+                    log_register('VISOR DVR [' . $dvrId . '] CHANGE CAMLIMIT `' . $newCamlimit . '`');
+                }
             }
         }
+    }
+
+    /**
+     * Returns count of cameras (channels) registered on some existing DVR
+     * 
+     * @param int $dvrId
+     * 
+     * @return int
+     */
+    protected function getDvrCameraCount($dvrId) {
+        $result = 0;
+        if (!empty($this->allCams)) {
+            foreach ($this->allCams as $io => $each) {
+                if ($each['dvrid'] == $dvrId) {
+                    $result++;
+                }
+            }
+        }
+        return($result);
+    }
+
+    /**
+     * Renders available DVRs health report
+     * 
+     * @return string
+     */
+    public function renderDVRsHealth() {
+        $result = '';
+        if (!empty($this->allDvrs)) {
+            $cells = wf_TableCell(__('ID'));
+            $cells .= wf_TableCell(__('IP'));
+            $cells .= wf_TableCell(__('Name'));
+            $cells .= wf_TableCell(__('Disks'));
+            $cells .= wf_TableCell(__('Database'));
+            $cells .= wf_TableCell(__('Network'));
+            $cells .= wf_TableCell(__('Channels') . ' / ' . __('Online'));
+            $cells .= wf_TableCell(__('Uptime'));
+            $cells .= wf_TableCell(__('CPU load'));
+            $cells .= wf_TableCell(__('Archive days'));
+
+            $rows = wf_TableRowStyled($cells, 'row1');
+
+            foreach ($this->allDvrs as $io => $each) {
+                if ($each['type'] == 'trassir') {
+                    if (!empty($each['ip']) AND ! empty($each['login']) AND ! empty($each['password']) AND ! empty($each['apikey']) AND ! empty($each['port'])) {
+                        $dvrGate = new TrassirServer($each['ip'], $each['login'], $each['password'], $each['apikey'], $each['port']);
+                        $health = $dvrGate->getHealth();
+                        $cells = wf_TableCell($each['id']);
+                        $cells .= wf_TableCell($each['ip']);
+                        $cells .= wf_TableCell($each['name']);
+                        $cells .= wf_TableCell(web_bool_led($health['disks']));
+                        $cells .= wf_TableCell(web_bool_led($health['database']));
+                        $cells .= wf_TableCell(web_bool_led($health['network']));
+                        $cells .= wf_TableCell($health['channels_total'] . ' / ' . $health['channels_online']);
+                        $cells .= wf_TableCell(zb_formatTime($health['uptime']));
+                        $cells .= wf_TableCell($health['cpu_load'] . '%');
+                        $cells .= wf_TableCell($health['disks_stat_main_days'] . ' / ' . $health['disks_stat_subs_days']);
+
+                        $rows .= wf_TableRowStyled($cells, 'row5');
+                    }
+                }
+            }
+
+            $result .= wf_TableBody($rows, '100%', 0, 'sortable');
+        } else {
+            $result .= $this->messages->getStyledMessage(__('Nothing to show'), 'warning');
+        }
+        return($result);
     }
 
     /**
@@ -1262,15 +2035,19 @@ class UbillingVisor {
         $result = '';
         if (!empty($this->allDvrs)) {
             $cells = wf_TableCell(__('ID'));
+            $cells .= wf_TableCell(__('Name'));
             $cells .= wf_TableCell(__('IP'));
             $cells .= wf_TableCell(__('Port'));
+            $cells .= wf_TableCell(__('Cameras'));
             $cells .= wf_TableCell(__('Actions'));
             $rows = wf_TableRow($cells, 'row1');
 
             foreach ($this->allDvrs as $io => $each) {
                 $cells = wf_TableCell($each['id']);
+                $cells .= wf_TableCell($each['name']);
                 $cells .= wf_TableCell($each['ip']);
                 $cells .= wf_TableCell($each['port']);
+                $cells .= wf_TableCell($this->getDvrCameraCount($each['id']) . ' / ' . $each['camlimit']);
                 $actLinks = wf_JSAlert(self::URL_ME . self::URL_DELDVR . $each['id'], web_delete_icon(), $this->messages->getDeleteAlert()) . ' ';
                 $actLinks .= wf_modalAuto(web_edit_icon(), __('Edit') . ' ' . $each['ip'], $this->renderDVREditForm($each['id']));
                 $cells .= wf_TableCell($actLinks);
@@ -1331,6 +2108,359 @@ class UbillingVisor {
         } else {
             $result .= __('Something went wrong') . ': ' . __('No such DVR exists') . ' [' . $dvrId . ']';
         }
+        return($result);
+    }
+
+    /**
+     * Renders preview of channels from all Trassir based DVRs
+     * 
+     * @return string
+     */
+    public function renderChannelsPreview() {
+        $result = '';
+        $chanCount = 0;
+        //chan controls here
+        $result .= wf_Link(self::URL_ME . self::URL_CHANS, web_yellow_led() . ' ' . __('No user assigned'), false, 'ubButton') . ' ';
+        $result .= wf_Link(self::URL_ME . self::URL_CHANS . '&allchannels=true', web_green_led() . ' ' . __('All channels'), false, 'ubButton') . ' ';
+        $result .= wf_delimiter();
+        $allFlag = (ubRouting::checkGet('allchannels')) ? true : false;
+
+        if (!empty($this->allDvrs)) {
+            $result .= wf_tag('div', false, '');
+            foreach ($this->allDvrs as $io => $eachDvr) {
+                if ($eachDvr['type'] == 'trassir') {
+                    $dvrGate = new TrassirServer($eachDvr['ip'], $eachDvr['login'], $eachDvr['password'], $eachDvr['apikey'], $eachDvr['port']);
+                    $serverHealth = $dvrGate->getHealth();
+                    if (!empty($serverHealth)) {
+                        if (isset($serverHealth['channels_health'])) {
+                            $dvrChannels = $serverHealth['channels_health'];
+                            if (!empty($dvrChannels)) {
+                                foreach ($dvrChannels as $ia => $eachChan) {
+                                    $renderChannel = false;
+                                    if ($allFlag) {
+                                        $renderChannel = true;
+                                    } else {
+                                        if (!isset($this->channelUsers[$eachChan['guid']])) {
+                                            $renderChannel = true;
+                                        }
+                                    }
+
+                                    if ($renderChannel) {
+                                        $streamUrl = $dvrGate->getLiveVideoStream($eachChan['guid'], 'main', 'mjpeg', $this->chanPreviewQuality, $this->chanPreviewFramerate);
+                                        $result .= wf_tag('div', false, 'whiteboard', 'style="width:' . $this->chanPreviewSize . ';"');
+                                        $channelEditControl = wf_Link(self::URL_ME . self::URL_CHANEDIT . $eachChan['guid'] . '&dvrid=' . $eachDvr['id'], web_edit_icon(__('Edit') . ' ' . __('channel')));
+                                        $result .= $eachChan['name'] . ' / ' . $eachChan['guid'] . ' @ ' . $eachDvr['id'];
+                                        $result .= wf_tag('br');
+                                        $result .= wf_img_sized($streamUrl, '', '90%');
+                                        $assignedUserId = (isset($this->channelUsers[$eachChan['guid']])) ? $this->channelUsers[$eachChan['guid']] : '';
+                                        $assignedUserLabel = (isset($this->allUsers[$assignedUserId])) ? $this->iconVisorUser() . ' ' . $this->allUsers[$assignedUserId]['realname'] : '';
+                                        $userAssignedLink = ($assignedUserId) ? wf_Link(self::URL_ME . self::URL_USERVIEW . $assignedUserId, $assignedUserLabel) : __('No');
+                                        $userLinkClass = ($assignedUserId) ? 'todaysig' : 'undone';
+                                        $result .= wf_tag('div', false, $userLinkClass);
+                                        $result .= $channelEditControl . ' ' . __('User') . ': ' . $userAssignedLink;
+                                        $result .= wf_tag('div', true);
+                                        $result .= __('Signal') . ' ' . web_bool_led($eachChan['signal']);
+                                        $result .= wf_CleanDiv();
+                                        $result .= wf_tag('div', true);
+                                        $chanCount++;
+                                    }
+                                }
+                            } else {
+                                $result .= $this->messages->getStyledMessage(__('Nothing to show'), 'warning');
+                            }
+                        }
+                    } else {
+                        $result .= $this->messages->getStyledMessage(__('DVR connection error') . ': [' . $eachDvr['id'] . ']', 'error');
+                    }
+                }
+            }
+
+            //all channels assigned, no channels registered alert
+            if ($chanCount == 0) {
+                $result .= $this->messages->getStyledMessage(__('Nothing to show'), 'warning');
+            }
+
+            $result .= wf_CleanDiv();
+            $result .= wf_tag('div', true);
+        } else {
+            $result .= $this->messages->getStyledMessage(__('DVRs') . ' ' . __('Not exists'), 'warning');
+        }
+        return($result);
+    }
+
+    /**
+     * Renders channel record mode editing form
+     * 
+     * @param string $channelGuid
+     * @param int $dvrId
+     * @param int $currentModeId
+     * 
+     * @return string
+     */
+    protected function renderChannelRecordForm($channelGuid, $dvrId, $currentModeId) {
+        $result = '';
+        $channelGuid = ubRouting::filters($channelGuid, 'mres');
+        $dvrId = ubRouting::filters($dvrId, 'int');
+        $currentModeId = ubRouting::filters($currentModeId, 'int');
+
+        $inputs = wf_HiddenInput('recordchannelguid', $channelGuid);
+        $inputs .= wf_HiddenInput('recordchanneldvrid', $dvrId);
+        $inputs .= wf_Selector('recordchannelmode', $this->recordModes, __('Archive record mode'), $currentModeId, false) . ' ';
+        $inputs .= wf_Submit(__('Save'));
+        $result .= wf_Form('', 'POST', $inputs, 'glamour');
+        return($result);
+    }
+
+    /**
+     * Changes some channel record mode
+     * 
+     * @return void
+     */
+    public function saveChannelRecordMode() {
+        if (ubRouting::checkPost(array('recordchannelguid', 'recordchanneldvrid', 'recordchannelmode'))) {
+            $channellGuid = ubRouting::post('recordchannelguid', 'mres');
+            $dvrId = ubRouting::post('recordchanneldvrid', 'int');
+            $mode = ubRouting::post('recordchannelmode', 'int');
+            if (isset($this->allDvrs[$dvrId])) {
+                $dvrData = $this->allDvrs[$dvrId];
+                if ($dvrData['type'] == 'trassir') {
+                    $trassir = new TrassirServer($dvrData['ip'], $dvrData['login'], $dvrData['password'], $dvrData['apikey'], $dvrData['port'], false);
+                    //channel avail check
+                    $allChannels = $trassir->getChannels();
+                    if (isset($allChannels[$channellGuid])) {
+                        $trassir->setChannelRecordMode($channellGuid, $mode);
+                        log_register('VISOR DVR [' . $dvrId . '] CHAN `' . $channellGuid . '` SET RECMODE [' . $mode . ']');
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Renders channel editing form
+     * 
+     * @param string $channelGuid
+     * @param int $dvrId
+     * 
+     * @return string
+     */
+    public function renderChannelEditForm($channelGuid, $dvrId) {
+        $result = '';
+        $channelGuid = ubRouting::filters($channelGuid, 'mres');
+        $dvrId = ubRouting::filters($dvrId, 'int');
+        if (isset($this->allDvrs[$dvrId])) {
+            $curUserId = '';
+            if (isset($this->channelUsers[$channelGuid])) {
+                //already assigned to someone
+                $curUserId = $this->channelUsers[$channelGuid];
+            } else {
+                $curUserId = (ubRouting::checkGet('useridpreset')) ? ubRouting::get('useridpreset', 'int') : '';
+            }
+            //some users preparing
+            $usersTmp = array('' => '-');
+            if (!empty($this->allUsers)) {
+                foreach ($this->allUsers as $io => $each) {
+                    $usersTmp[$each['id']] = $each['realname'];
+                }
+            }
+
+            $inputs = wf_HiddenInput('editchannelguid', $channelGuid);
+            $inputs .= wf_HiddenInput('editchanneldvrid', $dvrId);
+            $inputs .= wf_Selector('editchannelvisorid', $usersTmp, __('User'), $curUserId, false) . ' ';
+            $inputs .= wf_Submit(__('Save'));
+            $result .= wf_Form('', 'POST', $inputs, 'glamour');
+
+            $result .= wf_tag('br');
+            $dvrData = $this->allDvrs[$dvrId];
+            if ($dvrData['type'] == 'trassir') {
+                $trassir = new TrassirServer($dvrData['ip'], $dvrData['login'], $dvrData['password'], $dvrData['apikey']);
+                $channelUrl = $trassir->getLiveVideoStream($channelGuid, 'main', 'mjpeg', 95, 100);
+                $result .= wf_img_sized($channelUrl, '', '60%');
+                $result .= wf_delimiter();
+                //Channel record mode form here
+                $currentRecordMode = $trassir->getChannelRecordMode($channelGuid);
+                $result .= $this->renderChannelRecordForm($channelGuid, $dvrId, $currentRecordMode);
+            }
+
+            if (!isset($this->channelUsers[$channelGuid])) {
+                $result .= $this->messages->getStyledMessage(__('Channel without assigned user'), 'warning');
+                $result .= wf_delimiter();
+            } else {
+                $result .= $this->messages->getStyledMessage(__('Channel have user assigned') . ': ' . @$this->allUsers[$this->channelUsers[$channelGuid]]['realname'], 'success');
+                $result .= wf_delimiter();
+            }
+        } else {
+            $result .= $this->messages->getStyledMessage(__('Something went wrong') . ': ' . __('No such DVR exists') . ' [' . $dvrId . ']', 'error');
+        }
+        $result .= wf_link(self::URL_ME . self::URL_CHANS, wf_img('skins/play.png') . ' ' . __('Channels'), false, 'ubButton');
+        if (isset($this->channelUsers[$channelGuid])) {
+            $assignedUserId = $this->channelUsers[$channelGuid];
+            $result .= wf_link(self::URL_ME . self::URL_USERVIEW . $assignedUserId, $this->iconVisorUser() . ' ' . @$this->allUsers[$assignedUserId]['realname'], false, 'ubButton');
+        } else {
+            if (!empty($curUserId)) {
+                $result .= wf_link(self::URL_ME . self::URL_USERVIEW . $curUserId, $this->iconVisorUser() . ' ' . @$this->allUsers[$curUserId]['realname'], false, 'ubButton');
+            }
+        }
+        return($result);
+    }
+
+    /**
+     * Catches channel to user assign request and do required actions (update/delete)
+     * 
+     * @return void
+     */
+    public function saveChannelAssign() {
+        if (ubRouting::checkPost(array('editchannelguid', 'editchanneldvrid'))) {
+            $channelGuid = ubRouting::post('editchannelguid', 'mres');
+            $dvrId = ubRouting::post('editchanneldvrid', 'int');
+            if (ubRouting::checkPost('editchannelvisorid')) {
+                //create/update of assign
+                $visorId = ubRouting::post('editchannelvisorid', 'int'); //new channel owner ID
+                if (isset($this->channelUsers[$channelGuid])) {
+                    $oldChannelOwnerId = $this->channelUsers[$channelGuid];
+                    //change existing assign
+                    if ($visorId != $this->channelUsers[$channelGuid]) {
+                        $this->unassignChannel($this->channelUsers[$channelGuid], $dvrId, $channelGuid);
+                        $this->regenerateDvrChannelAcl($oldChannelOwnerId, $dvrId); //NVR sync on channel owner change for old owner
+                        $this->assignChannel($visorId, $dvrId, $channelGuid);
+                        $this->regenerateDvrChannelAcl($visorId, $dvrId); //NVR sync on channel owner change for new owner
+                    }
+                } else {
+                    //create new channel assign
+                    $this->assignChannel($visorId, $dvrId, $channelGuid);
+                    $this->regenerateDvrChannelAcl($visorId, $dvrId); //NVR sync on new channel assign
+                }
+            } else {
+                //existing assign deletion
+                if (isset($this->channelUsers[$channelGuid])) {
+                    $currentUserAssignId = $this->channelUsers[$channelGuid];
+                    if (!empty($currentUserAssignId)) {
+                        $this->unassignChannel($currentUserAssignId, $dvrId, $channelGuid);
+                        $this->regenerateDvrChannelAcl($currentUserAssignId, $dvrId); //NVR sync on assign deletion
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Regenerates all ACL for some visor user on Some DVR
+     * 
+     * @param int $visorId
+     * @param int $dvrId
+     * 
+     * @return string
+     */
+    public function regenerateDvrChannelAcl($visorId, $dvrId) {
+        $result = '';
+        $visorId = ubRouting::filters($visorId, 'int');
+        $dvrId = ubRouting::filters($dvrId, 'int');
+
+        if (!empty($dvrId) AND ! empty($visorId)) {
+            if (isset($this->allSecrets[$visorId])) {
+                if (isset($this->allDvrs[$dvrId])) {
+                    if (isset($this->allUsers[$visorId])) {
+                        $dvrData = $this->allDvrs[$dvrId];
+                        if ($dvrData['type'] == 'trassir') {
+                            $secretData = $this->allSecrets[$visorId];
+                            $dvrGate = new TrassirServer($dvrData['ip'], $dvrData['login'], $dvrData['password'], $dvrData['apikey'], $dvrData['port'], true);
+                            $this->chans->where('visorid', '=', $visorId);
+                            $this->chans->where('dvrid', '=', $dvrId);
+                            $userChans = $this->chans->getAll();
+                            $userRegistered = $dvrGate->getUserGuid($secretData['login']);
+
+                            if (!$userRegistered) {
+                                //perform creating user on DVR
+                                $dvrGate->createUser($secretData['login'], $secretData['password']);
+                                log_register('VISOR USER [' . $visorId . '] REGISTERED ON DVR [' . $dvrId . '] AS `' . $secretData['login'] . '` SYNC');
+                            }
+                            //setting valid ACL for this DVR
+                            $dvrChans = array();
+                            if (!empty($userChans)) {
+                                foreach ($userChans as $io => $eachChan) {
+                                    $dvrChans[] = $eachChan['chan'];
+                                }
+                            }
+
+                            /**
+                             * TODO: check channels availability
+                             */
+                            $aclGate = new TrassirServer($dvrData['ip'], $dvrData['login'], $dvrData['password'], $dvrData['apikey'], $dvrData['port'], true);
+                            $aclGate->assignUserChannels($secretData['login'], $dvrChans);
+                            log_register('VISOR USER [' . $visorId . '] REGEN ACL ON DVR [' . $dvrId . '] AS `' . $secretData['login'] . '` SYNC');
+                        }
+                    }
+                }
+            }
+        }
+        return($result);
+    }
+
+    /**
+     * Returns JSON list of mjpeg URLs of channels assigned for user
+     * 
+     * @param int $visorId
+     * @param bool $maxQual
+     * 
+     * @return string
+     */
+    public function getUserChannelsPreviewJson($visorId, $maxQual = false) {
+        $result = '';
+        $visorId = ubRouting::filters($visorId, 'int');
+        $urlTmp = array();
+        if (isset($this->allChannels[$visorId])) {
+            foreach ($this->allChannels[$visorId] as $io => $each) {
+                if (isset($this->allDvrs[$each['dvrid']])) {
+                    $dvrData = $this->allDvrs[$each['dvrid']];
+                    if ($dvrData['type'] = 'trassir') {
+                        $trassir = new TrassirServer($dvrData['ip'], $dvrData['login'], $dvrData['password'], $dvrData['apikey']);
+                        if (!$maxQual) {
+                            $url = $trassir->getLiveVideoStream($each['chan'], 'main', 'mjpeg', $this->chanPreviewQuality, $this->chanPreviewFramerate);
+                        } else {
+                            $url = $trassir->getLiveVideoStream($each['chan'], 'main', 'mjpeg', 95, 100);
+                        }
+                        $urlTmp[$each['chan']] = $url;
+                    }
+                }
+            }
+        }
+        $result = json_encode($urlTmp);
+        return($result);
+    }
+
+    /**
+     * Returns some DVRs authorization data if user have some channels assigned on managable DVRs
+     * 
+     * @param int $visorId
+     * 
+     * @return string
+     */
+    public function getUserDvrAuthData($visorId) {
+        $result = array();
+        $visorId = ubRouting::filters($visorId, 'int');
+        if (isset($this->allUsers[$visorId])) {
+            if (isset($this->allSecrets[$visorId])) {
+                $secretsData = $this->allSecrets[$visorId];
+                if (isset($this->allChannels[$visorId])) {
+                    if (!empty($this->allChannels[$visorId])) {
+                        $allChanData = $this->allChannels[$visorId];
+                        foreach ($allChanData as $io => $each) {
+                            if (isset($this->allDvrs[$each['dvrid']])) {
+                                $dvrData = $this->allDvrs[$each['dvrid']];
+                                $result[$each['dvrid']]['dvrid'] = $dvrData['id'];
+                                $result[$each['dvrid']]['ip'] = $dvrData['ip'];
+                                $result[$each['dvrid']]['port'] = $dvrData['port'];
+                                $result[$each['dvrid']]['login'] = $secretsData['login'];
+                                $result[$each['dvrid']]['password'] = $secretsData['password'];
+                                $result[$each['dvrid']]['weburl'] = 'https://' . $dvrData['ip'] . ':' . $dvrData['port'] . '/webgui/';
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        $result = json_encode($result);
+
         return($result);
     }
 

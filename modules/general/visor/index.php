@@ -25,10 +25,10 @@ if (cfr('VISOR')) {
             $visor->ajaxAllCams();
         }
 
-        //users creation
+        //new user creation
         if (ubRouting::checkPost(array('newusercreate', 'newusername'))) {
-            $visor->createUser();
-            ubRouting::nav($visor::URL_ME . $visor::URL_USERS);
+            $userRegistrationResult = $visor->createUser();
+            ubRouting::nav($visor::URL_ME . $visor::URL_USERVIEW . $userRegistrationResult);
         }
 
         //all cameras listing
@@ -104,7 +104,7 @@ if (cfr('VISOR')) {
 
         //user profile rendering
         if (ubRouting::checkGet(array('showuser'))) {
-            show_window(__('User profile'), $visor->renderUserProfile(ubRouting::get('showuser')));
+            show_window(__('Video surveillance user profile'), $visor->renderUserProfile(ubRouting::get('showuser')));
         }
 
         //camera profile/editing interface
@@ -140,16 +140,43 @@ if (cfr('VISOR')) {
                 }
             }
         }
-        
+
+        //channel user assign/delete assign
+        if (ubRouting::checkPost(array('editchannelguid', 'editchanneldvrid'))) {
+            $visor->saveChannelAssign();
+            ubRouting::nav($visor::URL_ME . $visor::URL_CHANEDIT . ubRouting::post('editchannelguid') . '&dvrid=' . ubRouting::post('editchanneldvrid'));
+        }
+
+        //channel record mode editing
+        if (ubRouting::checkPost(array('recordchannelguid', 'recordchanneldvrid', 'recordchannelmode'))) {
+            $visor->saveChannelRecordMode();
+            ubRouting::nav($visor::URL_ME . $visor::URL_CHANEDIT . ubRouting::post('recordchannelguid') . '&dvrid=' . ubRouting::post('recordchanneldvrid'));
+        }
+
         //DVR editing
         if (ubRouting::checkPost(array('editdvrid', 'editdvrip'))) {
             $visor->saveDVR();
-            ubRouting::nav($visor::URL_ME.$visor::URL_DVRS);
+            ubRouting::nav($visor::URL_ME . $visor::URL_DVRS);
         }
 
         //existing DVR listing
         if (ubRouting::checkGet(array('dvrs'))) {
             show_window(__('DVRs'), $visor->renderDVRsList());
+        }
+
+        //existing DVR channels preview & management
+        if (ubRouting::checkGet('channels')) {
+            show_window(__('Channels'), $visor->renderChannelsPreview());
+        }
+
+        //channel editing form
+        if (ubRouting::checkGet(array('editchannel', 'dvrid'))) {
+            show_window(__('Edit') . ' ' . __('channel'), $visor->renderChannelEditForm(ubRouting::get('editchannel'), ubRouting::get('dvrid')));
+        }
+
+        //DVRs health
+        if (ubRouting::checkGet(array('health'))) {
+            show_window(__('DVR health'), $visor->renderDVRsHealth());
         }
     } else {
         show_error(__('This module is disabled'));

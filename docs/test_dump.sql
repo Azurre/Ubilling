@@ -2577,13 +2577,13 @@ ALTER TABLE `salary_jobprices` CHANGE `time` `time` FLOAT NULL DEFAULT NULL;
 ALTER TABLE `dreamkas_operations` ADD `repeated_fiscop_id` varchar(255) NOT NULL AFTER `operation_body`;
 
 CREATE TABLE IF NOT EXISTS `qinq` (
-    `id` INT IDENTITY(1,1) NOT NULL AUTO_INCREMENT, 
+    `id` INT NOT NULL AUTO_INCREMENT, 
     `login` VARCHAR(45) NULL, 
     `svlan` INT(4) NULL,
     `cvlan` INT(4) NULL,
     PRIMARY KEY (`id`), 
     UNIQUE KEY (`login`)
-) ENGINE = MyISAM DEFAULT CHARSET=UTF8 AUTO_INCREMENT=1;
+) ENGINE = MyISAM AUTO_INCREMENT=1 DEFAULT CHARSET=UTF8;
 
 ALTER TABLE `qinq` ADD `svlan_id` int(10) NOT NULL AFTER `svlan`;
 
@@ -2642,3 +2642,102 @@ ALTER TABLE `banksta2_presets` ADD `replacements_cnt` tinyint(3) DEFAULT 1;
 ALTER TABLE `banksta2_presets` ADD `remove_strs` tinyint(3) DEFAULT 0;
 ALTER TABLE `banksta2_presets` ADD `col_remove_strs` varchar(100) DEFAULT '';
 ALTER TABLE `banksta2_presets` ADD `strs_to_remove` varchar(200) DEFAULT '';
+
+ALTER TABLE `visor_dvrs` ADD `apikey` VARCHAR(255) NULL DEFAULT NULL AFTER `password`; 
+ALTER TABLE `visor_dvrs` ADD `name` VARCHAR(255) NULL DEFAULT NULL AFTER `apikey`;
+ALTER TABLE `visor_dvrs` ADD `type` VARCHAR(40) NULL DEFAULT NULL AFTER `name`;
+
+CREATE TABLE IF NOT EXISTS `traptypes` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `match` varchar(255) NOT NULL,
+  `name` varchar(255) NOT NULL,
+  `color` varchar(20) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 AUTO_INCREMENT=1;
+
+ALTER TABLE `cardbank` ADD KEY `serial` (`serial`);
+ 
+ALTER TABLE `cardbank` ADD KEY `part` (`part`);
+ 
+ALTER TABLE `cardbank` ADD KEY `serial_part` (`serial`,`part`);
+
+-- 1.0.4 update
+
+CREATE TABLE IF NOT EXISTS `envyscripts` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `modelid` int(11) NOT NULL,
+  `data` TEXT DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 AUTO_INCREMENT=1;
+
+
+CREATE TABLE IF NOT EXISTS `envydevices` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `switchid` int(11) NOT NULL,
+  `login` varchar(255) DEFAULT NULL,
+  `password` varchar(255) DEFAULT NULL,
+  `enablepassword` varchar(255) DEFAULT NULL,
+  `custom1` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 AUTO_INCREMENT=1;
+
+CREATE TABLE IF NOT EXISTS `envydata` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `switchid` int(11) NOT NULL,
+  `date` datetime NOT NULL,
+  `config` mediumtext,
+  PRIMARY KEY (`id`),
+  KEY `switchid` (`switchid`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 AUTO_INCREMENT=1;
+
+ALTER TABLE `envydevices` ADD `active` TINYINT NULL DEFAULT '1' AFTER `switchid`;
+
+-- 1.0.5 update
+
+CREATE TABLE IF NOT EXISTS `visor_chans` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `visorid` int(11) NOT NULL,
+  `dvrid` int(11) NOT NULL,
+  `chan` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 AUTO_INCREMENT=1;
+
+CREATE TABLE IF NOT EXISTS `visor_secrets` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `visorid` int(11) NOT NULL,
+  `login` varchar(64) NOT NULL,
+  `password` varchar(64) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 AUTO_INCREMENT=1;
+
+ALTER TABLE `frozen_charge_days` ADD `last_freeze_charge_dt` datetime NOT NULL AFTER `freeze_days_used`;
+ALTER TABLE `frozen_charge_days` ADD `last_workdays_upd_dt` datetime NOT NULL;
+
+ALTER TABLE `visor_dvrs` ADD `camlimit` int(11) NULL DEFAULT 0 AFTER `type`;
+
+ALTER TABLE `vservices` MODIFY `price` double NOT NULL DEFAULT 0;
+ALTER TABLE `vservices` ADD `charge_period_days` tinyint(3) NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS `invoices` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `login` varchar(50) NOT NULL,
+  `invoice_num` varchar(40) NOT NULL DEFAULT '',
+  `invoice_date` datetime NOT NULL,
+  `invoice_sum` double NOT NULL DEFAULT 0,
+  `invoice_body` text NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY (`invoice_num`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 AUTO_INCREMENT=1;
+
+CREATE TABLE IF NOT EXISTS `address_extended` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `login` varchar(50) NOT NULL,
+  `postal_code` varchar(10) NOT NULL DEFAULT '',
+  `town_district` varchar(150) NOT NULL DEFAULT '',
+  `address_exten` varchar(250) NOT NULL DEFAULT '',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY (`login`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 AUTO_INCREMENT=1;
+
+ALTER TABLE `payments` MODIFY `note` varchar(200) NULL DEFAULT NULL;
+ALTER TABLE `paymentscorr` MODIFY `note` varchar(200) NULL DEFAULT NULL;

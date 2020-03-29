@@ -572,7 +572,12 @@ function ts_JGetUndoneTasks() {
         $curempid = ts_GetEmployeeByLogin($whoami);
         $appendQuery = " AND `employee`='" . $curempid . "'";
     } else {
-        $appendQuery = '';
+        if (ispos($displaytype, 'displayempid')) {
+            $displayEmployeeId = ubRouting::filters($displaytype, 'int');
+            $appendQuery = " AND `employee`='" . $displayEmployeeId . "'";
+        } else {
+            $appendQuery = '';
+        }
     }
 
     if (isset($altCfg['TASKMAN_ADV_FILTERS']) and $altCfg['TASKMAN_ADV_FILTERS']) {
@@ -704,7 +709,12 @@ function ts_JGetDoneTasks() {
         $curempid = ts_GetEmployeeByLogin($whoami);
         $appendQuery = " AND `employee`='" . $curempid . "'";
     } else {
-        $appendQuery = '';
+        if (ispos($displaytype, 'displayempid')) {
+            $displayEmployeeId = ubRouting::filters($displaytype, 'int');
+            $appendQuery = " AND `employee`='" . $displayEmployeeId . "'";
+        } else {
+            $appendQuery = '';
+        }
     }
 
     if (isset($altCfg['TASKMAN_ADV_FILTERS']) and $altCfg['TASKMAN_ADV_FILTERS']) {
@@ -823,7 +833,12 @@ function ts_JGetAllTasks() {
         $curempid = ts_GetEmployeeByLogin($whoami);
         $appendQuery = " AND `employee`='" . $curempid . "'";
     } else {
-        $appendQuery = '';
+        if (ispos($displaytype, 'displayempid')) {
+            $displayEmployeeId = ubRouting::filters($displaytype, 'int');
+            $appendQuery = " AND `employee`='" . $displayEmployeeId . "'";
+        } else {
+            $appendQuery = '';
+        }
     }
 
     if (isset($altCfg['TASKMAN_ADV_FILTERS']) and $altCfg['TASKMAN_ADV_FILTERS']) {
@@ -927,6 +942,8 @@ function ts_JGetAllTasks() {
  * @return string
  */
 function ts_TaskTypicalNotesSelector($settings = true) {
+    global $ubillingConfig;
+    $noLengthCut = $ubillingConfig->getAlterParam('TASKMAN_NO_TYPICALNOTES_CUT');
 
     $rawNotes = zb_StorageGet('PROBLEMS');
     if ($settings) {
@@ -949,16 +966,18 @@ function ts_TaskTypicalNotesSelector($settings = true) {
 
     if (!empty($rawNotes)) {
         foreach ($rawNotes as $eachnote) {
-            if (mb_strlen($eachnote, 'utf-8') > 20) {
+            if (!$noLengthCut and mb_strlen($eachnote, 'utf-8') > 20) {
                 $shortNote = mb_substr($eachnote, 0, 20, 'utf-8') . '...';
             } else {
                 $shortNote = $eachnote;
             }
+
             $typycalNotes[$eachnote] = $shortNote;
         }
     }
 
-    $selector = wf_Selector('typicalnote', $typycalNotes, __('Problem') . ' ' . $settingsControl, '', true);
+    $selectorAlterWidth = ($noLengthCut) ? 'style="width: 70%"' : '';
+    $selector = wf_Selector('typicalnote', $typycalNotes, __('Problem') . ' ' . $settingsControl, '', true, false, '', '', $selectorAlterWidth);
     return ($selector);
 }
 
@@ -1100,7 +1119,7 @@ function ts_TaskCreateFormProfile($address, $mobile, $phone, $login) {
         $inputs .= wf_tag('br');
         $inputs .= wf_Selector('newtaskjobtype', $alljobtypes, __('Job type'), '', true);
         $inputs .= wf_tag('br');
-        $inputs .= wf_Selector('newtaskemployee', $allemployee, __('Who should do'), $telepat_who_should_do['id'], true, $employeeSorting);
+        $inputs .= wf_Selector('newtaskemployee', $allemployee, __('Who should do'), @$telepat_who_should_do['id'], true, $employeeSorting);
         $inputs .= wf_tag('br');
         $inputs .= wf_tag('label') . __('Job note') . wf_tag('label', true) . wf_tag('br');
         $inputs .= ts_TaskTypicalNotesSelector();
@@ -1158,7 +1177,7 @@ function ts_PreviousUserTasksRender($login, $address = '', $noFixedWidth = false
                 } else {
                     $guessedLogin = $telepathy->getLogin($each['address']);
                     if ($guessedLogin) {
-                        $addressLoginsCache[$each['address']] = $guessedLogin;
+                        @$addressLoginsCache[$each['address']] = $guessedLogin;
                     }
                 }
 
@@ -1372,15 +1391,27 @@ function ts_ShowPanel() {
 
         if ($employeeid) {
             $curselected = (isset($_POST['displaytype'])) ? $_POST['displaytype'] : '';
-            $displayTypes = array('all' => __('Show tasks for all users'), 'onlyme' => __('Show only mine tasks'));
+            $displayTypes = array(
+                'all' => __('Show tasks for all users'),
+                'onlyme' => __('Show only mine tasks')
+            );
+            //some other employee
+            $activeEmployeeTmp = ts_GetActiveEmployee();
+            if (!empty($activeEmployeeTmp)) {
+                foreach ($activeEmployeeTmp as $actId => $empName) {
+                    $displayTypes['displayempid' . $actId] = $empName;
+                }
+            }
             $inputs .= wf_Selector('displaytype', $displayTypes, '', $curselected, false);
         }
 
+        $submitOpts = '';
         if ($advFiltersEnabled) {
             $inputs .= ts_AdvFiltersControls();
+            $submitOpts = ' style="width: 100%; height: 1.7em; font-weight: 700;" ';
         }
 
-        $inputs .= wf_Submit('Show');
+        $inputs .= wf_Submit('Show', '', $submitOpts);
         $showTypeForm = wf_Form('', 'POST', $inputs, 'glamour');
         $result .= $showTypeForm;
     }
@@ -2484,6 +2515,7 @@ function ts_PrintDialogue() {
     global $ubillingConfig;
     $advFiltersEnabled = $ubillingConfig->getAlterParam('TASKMAN_ADV_FILTERS');
 
+    $submitOpts = '';
     $inputs = wf_DatePickerPreset('printdatefrom', curdate()) . ' ' . __('From') . ' ';
     $inputs .= wf_DatePickerPreset('printdateto', curdate()) . ' ' . __('To') . ' ';
 
@@ -2499,11 +2531,14 @@ function ts_PrintDialogue() {
             $inputs .= wf_Selector('displaytype', $displayTypes, '', $curselected, false);
         }
 
-        $inputs .= ts_AdvFiltersControls();
+        if ($advFiltersEnabled) {
+            $inputs .= ts_AdvFiltersControls();
+            $submitOpts = ' style="width: 85%; height: 1.7em; font-weight: 700; margin-top: 10px; margin-left: 29px;" ';
+        }
     }
 
     $inputs .= wf_CheckInput('tableview', __('Grid view'), false, true) . ' ';
-    $inputs .= wf_Submit(__('Print'));
+    $inputs .= wf_Submit(__('Print'), '', $submitOpts);
     $result = wf_Form("", 'POST', $inputs, 'glamour');
     return ($result);
 }
@@ -2891,6 +2926,7 @@ function ts_AdvFiltersControls() {
     $jobtypecontains = ( wf_CheckPost(array('filtertaskjobtype')) ) ? $_POST['filtertaskjobtype'] : '';
     $addresscontains = ( wf_CheckPost(array('filtertaskaddr')) ) ? $_POST['filtertaskaddr'] : '';
     $jobnotecontains = ( wf_CheckPost(array('filtertaskjobnote')) ) ? $_POST['filtertaskjobnote'] : '';
+    $phonecontains   = ( wf_CheckPost(array('filtertaskphone')) ) ? $_POST['filtertaskphone'] : '';
 
     $inputs = wf_tag('h3', false, '', 'style="margin: 1px 5px 1px 10px; display: inline-block"');
     $inputs .= __('Job type');
@@ -2914,6 +2950,12 @@ function ts_AdvFiltersControls() {
     $inputs .= wf_TextInput('filtertaskjobnote', '', $jobnotecontains);
     $inputs .= '&nbsp&nbsp&nbsp';
 
+    $inputs .= wf_tag('h3', false, '', 'style="margin: 1px 5px 1px 10px; display: inline-block"');
+    $inputs .= __('Job phone contains');
+    $inputs .= wf_tag('h3', true);
+    $inputs .= wf_TextInput('filtertaskphone', '', $phonecontains, true);
+    $inputs .= '&nbsp&nbsp&nbsp';
+
     return($inputs);
 }
 
@@ -2932,6 +2974,10 @@ function ts_AdvFiltersQuery() {
 
     if (wf_CheckPost(array('filtertaskjobnote'))) {
         $AppendQuery .= " AND `jobnote` LIKE '%" . $_POST['filtertaskjobnote'] . "%'";
+    }
+
+    if (wf_CheckPost(array('filtertaskphone'))) {
+        $AppendQuery .= " AND `phone` LIKE '%" . $_POST['filtertaskphone'] . "%'";
     }
 
     return ($AppendQuery);

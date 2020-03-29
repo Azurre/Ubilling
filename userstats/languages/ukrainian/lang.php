@@ -380,7 +380,7 @@ $lang['def']['Delete'] = 'Видалити';
 $lang['def']['Only one base tariff allowed'] = 'Доступний тільки один базовий тариф';
 $lang['def']['Available only in addition to base tariff'] = 'Доступний тільки в доповнення до базового тарифу';
 $lang['def']['You subscribed'] = 'Ви підписані'; 
-$lang['def']['On unsubscription will be charged fee the equivalent value of the subscription.'] = 'При відписці від передплати з рахунку буде одразу стягнуто суму еквіваленту вартості цієї передплати.';
+$lang['def']['On unsubscription will be charged fee the equivalent value of the subscription.'] = 'При відписці від передплати з рахунку буде одразу стягнуто суму еквіваленту вартості цієї передплати. Якщо ви бажаєте відписатися без списання коштів зверніться до техпідтримки.';
 $lang['def']['Balance before'] = 'Баланс до';
 $lang['def']['Base'] = 'Базовий';
 
@@ -400,11 +400,17 @@ $lang['def']['How to configure your devices and use service'] = 'Як налаш
 
 $lang['def']['Surveillance'] = 'Відеоспостереження';
 $lang['def']['You have no cameras assigned for this user profile'] = 'У вас немає камер відеоспостереження присвоєних цьому обліковому запису';
-$lang['def']['Surveillance service is not enabled for you account'] = 'Послугу відеоспостереження ';
+$lang['def']['Surveillance service is not enabled for you account'] = 'Послугу відеоспостереження не підключено для вашого облікового запису';
 $lang['def']['Your cameras'] = 'Ваші камери';
 $lang['def']['Money for cameras will be charged from your primary account'] = 'Кошти будуть стягнуті з вашого основного облікового запису';
 $lang['def']['if no funds for further cameras functioning'] = 'у випадку, якщо їх буде не достатньо для подальшої роботи камер';
 $lang['def']['Your primary account balance now is'] = 'Поточний баланс вашого основного облікового запису';
 $lang['def']['You can recharge it with following Payment ID'] = 'Ви можете поповнити його за допомогою цього платіжного ID';
+$lang['def']['Back'] = 'Назад';
+$lang['def']['Settings'] = 'Налаштування';
+$lang['def']['Go to'] = 'Перейти';
+$lang['def']['Host'] = 'Хост';
+$lang['def']['Port'] = 'Порт';
+
 
 ?>
