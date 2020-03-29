@@ -489,7 +489,8 @@ class WhiteBoard {
             $rows.= wf_TableRow($cells, 'row3');
 
             $cells = wf_TableCell(__('Who should do'), '', 'row2');
-            $cells.= wf_TableCell(@$this->allEmployee[$recordData['employeeid']]);
+            $employee = isset($this->allEmployee[$recordData['employeeid']]) ? $this->allEmployee[$recordData['employeeid']] : '';
+            $cells.= wf_TableCell($employee);
             $rows.= wf_TableRow($cells, 'row3');
 
             $cells = wf_TableCell(__('Creation date') . ' / ' . __('Finish date'), '', 'row2');

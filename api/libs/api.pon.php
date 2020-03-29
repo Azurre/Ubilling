@@ -3522,11 +3522,12 @@ class PONizer {
 //not registered?
                 if ($this->checkMacUnique($onuMac)) {
                     $login = in_array($onuMac, array_map('strtolower', $allUsermacs)) ? array_search($onuMac, array_map('strtolower', $allUsermacs)) : '';
-                    $userLink = $login ? wf_Link('?module=userprofile&username=' . $login, web_profile_icon() . ' ' . @$allUserData[$login]['login'] . '', false) : '';
-                    $userLogin = $login ? @$allUserData[$login]['login'] : '';
-                    $userRealnames = $login ? @$allUserData[$login]['realname'] : '';
-                    $userTariff = $login ? @$allUserData[$login]['Tariff'] : '';
-                    $userIP = $login ? @$allUserData[$login]['ip'] : '';
+                    $userData[$login] = isset($allUserData[$login]) ? $allUserData[$login] : [];
+                    $userLink = $login ? wf_Link('?module=userprofile&username=' . $login, web_profile_icon() . ' ' . @$userData['login'] . '', false) : '';
+                    $userLogin = $login ? @$userData['login'] : '';
+                    $userRealnames = $login ? @$userData['realname'] : '';
+                    $userTariff = $login ? @$userData['Tariff'] : '';
+                    $userIP = $login ? @$userData['ip'] : '';
                     $LnkID = wf_InputId();
 
                     $actControls = wf_tag('a', false, '', 'id="' . $LnkID . '" href="#" title="' . __('Register new ONU') . '"');
@@ -3563,12 +3564,12 @@ class PONizer {
                                       ';
                     $actControls .= wf_tag('script', true);
 
-                    $oltData = @$this->allOltDevices[$oltId];
+                    $oltData = isset($this->allOltDevices[$oltId]) ? $this->allOltDevices[$oltId] : null;
 
                     if (!isset($this->hideOnuMac[$onuMac])) {
                         $data[] = $oltData;
                         $data[] = $userLink;
-                        $data[] = @$allUserData[$login]['fulladress'];
+                        $data[] = isset($userData['fulladress']) ? $userData['fulladress'] : '';
                         $data[] = $userRealnames;
                         $data[] = $userTariff;
                         $data[] = $userIP;
